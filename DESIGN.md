@@ -101,6 +101,7 @@ Codex has no equivalent, so only its file is generated:
 
 The generated file starts with a marker saying it is generated and naming its sources. The state file stores a hash of each source and of the generated output:
 
+- On the first install, an existing file that equals the generated output without the marker is backed up and replaced. Any other existing content is a conflict.
 - If the sources changed and the output did not, `install` regenerates it.
 - If the output changed since it was generated, `install` reports a conflict and shows the diff. The local edit must be moved to a source file or discarded explicitly.
 - `doctor` reports when the output is older than its sources, for example after `git pull`.
@@ -120,7 +121,7 @@ The tool creates a separate symlink for each skill directory. It does not replac
 
 Codex also loads skills from `$CODEX_HOME/skills` (`~/.codex/skills` by default). Its bundled skill creator and installer still write new skills there. Therefore:
 
-- Migration moves every managed name out of `~/.codex/skills` before creating its link under `~/.agents/skills`. The old copy is backed up first.
+- For every Codex target, the install planner also checks `~/.codex/skills/<name>`. If that copy is identical to the repository source, it is backed up and removed in the same run that creates the link under `~/.agents/skills`. If it differs, it is a conflict.
 - `~/.codex/skills/.system` is never touched.
 - `doctor` always inspects both Codex locations and reports skills created by Codex in the legacy location as unmanaged.
 
@@ -137,11 +138,19 @@ Both the directory name and the `name` field of `SKILL.md` are compared, without
 
 Shared skills use only features supported by both agents. Agent-specific frontmatter, commands, paths, tool assumptions, and runtime behavior stay in their owner's folder.
 
+A skill refers to its own files by paths relative to the skill folder, never by an install location such as `~/.claude/skills/<name>/...` or `~/.codex/skills/<name>/...`. Install locations differ between agents and change during migration.
+
+### External skills
+
+Some skills are installed and updated by an application, not written by the user. They stay application-managed on each device and are never adopted, copied into the repository, or linked by the tool. Today this is `agterm`, which the agterm app installs through Help ▸ Install Agent Skill… or as a plugin. A repository copy would go stale on every app update, and a reinstall from the app would write through the link into the repository.
+
 Each skill may declare required CLI programs, MCP servers, and supported versions. Missing dependencies produce a clear diagnostic. The management tool never installs system dependencies.
 
 ## Manifest
 
 `manifest.json` is the installation allowlist. Files are not installed merely because they exist in the repository, and `doctor` fails when a skill directory in the repository has no manifest entry.
+
+The `external` list names skills that are application-managed (see [External skills](#external-skills)). `doctor` reports them as external instead of unmanaged, and warns if one of them is a link into this repository. `adopt` refuses them.
 
 Each entry describes:
 
@@ -156,13 +165,14 @@ Example:
 ```json
 {
   "version": 1,
+  "external": ["agterm"],
   "entries": [
     {
-      "id": "skill/agterm",
+      "id": "skill/backlog",
       "method": "symlink",
-      "source": "shared/skills/agterm",
-      "targets": ["~/.agents/skills/agterm", "~/.claude/skills/agterm"],
-      "requires": { "commands": ["agtermctl"] }
+      "source": "shared/skills/backlog",
+      "targets": ["~/.agents/skills/backlog", "~/.claude/skills/backlog"],
+      "requires": { "commands": ["node"] }
     },
     {
       "id": "instructions/claude",
@@ -201,7 +211,7 @@ scripts/ai-config doctor
 scripts/ai-config diff <id>
 scripts/ai-config install --dry-run
 scripts/ai-config install [--prune] [--replace-local <id>]
-scripts/ai-config adopt --agent <agent> --skill <name> [--replace-repo]
+scripts/ai-config adopt --agent <agent> --skill <name> --to <owner> [--replace-repo]
 scripts/ai-config uninstall
 scripts/ai-config restore <backup-id>
 ```
@@ -223,6 +233,8 @@ For each target, the planner chooses one action:
 7. Link points into this repository but has no manifest entry (a removed or renamed skill): reported as a managed orphan and removed only with `--prune`.
 8. Local content with no repository entry: reported as unmanaged and never changed.
 
+For Codex targets, the planner also adds the action for the legacy copy in `~/.codex/skills` (see [Legacy Codex location](#legacy-codex-location)).
+
 Two entries are identical when they contain the same relative paths, the same file contents, and the same executable bits. `.DS_Store` files are ignored. Nested symlinks are compared by their link text.
 
 Conflicts are resolved explicitly:
@@ -239,7 +251,12 @@ Conflicts are resolved explicitly:
 
 ### Adopting local content
 
-`adopt` imports a local skill into the repository and adds its manifest entry. It runs the same security checks as `doctor` and refuses forbidden files. It never commits.
+`adopt` imports a local skill into the repository and adds its manifest entry:
+
+- `--agent` selects where to look: both Codex locations for `codex`, `~/.claude/skills` for `claude`.
+- `--to shared|codex|claude` selects the owner folder. The owner decides the targets: `shared` installs into both agents.
+- It refuses external skills, forbidden files, and secrets.
+- It never changes the agent homes and never commits.
 
 ### Uninstall behavior
 
@@ -293,6 +310,7 @@ Scripts inside skills are executable capabilities. Their code, dependencies, req
 - Required `SKILL.md` metadata.
 - Invalid classifications and skill directories missing from the manifest.
 - Duplicate skill names across all discovery locations.
+- External skills that are links into this repository.
 - Missing referenced files, broken symlinks, and managed orphans.
 - Generated output that is older than its sources or was edited locally.
 - Script syntax and executable permissions.
@@ -350,17 +368,36 @@ Ordinary changes are recorded in Git history. Incompatible changes to the manife
 
 The existing local configuration contains these known cases:
 
-- `agterm` is identical in `~/.codex/skills` and `~/.claude/skills` and is a candidate for `shared/skills/`.
-- `backlog` and `commit-me` differ between agents and require review before classification.
+- `agterm` is external. It stays app-managed and is not migrated.
+- `backlog` and `commit-me` differ between agents and require review before classification. The Claude `backlog` names its own files by install location and must switch to relative paths.
 - Codex `claude-review` and `task-plan` are counterparts to Claude `codex-review` and `plan`. They stay agent-specific.
 - `styles-handling` exists only under `~/.agents/skills` and requires classification.
 - `~/.claude/skills/synced/` is cloud-synchronized and never managed.
 - `~/.codex/AGENTS.md` and `~/.claude/CLAUDE.md` state the same policies in different words. Migration chooses one wording for `shared/instructions.md`.
 - `~/.claude/rules/` does not exist yet and is created by the first install.
 
-Each Codex skill is migrated in this order: classify it, adopt it into the repository, back up and remove the copy in `~/.codex/skills`, then link it into `~/.agents/skills`.
-
 Migration never assumes that similarly named skills should be merged. Divergent content remains unchanged until reviewed.
+
+### One skill per step
+
+Migration is not done in one run. Because the manifest is an allowlist, a skill that is not listed yet stays where it is, and `doctor` only reports it. Each skill moves in its own step and its own commit, and is tested in the real agents before the next one starts:
+
+1. `doctor` is clean apart from unmanaged skills.
+2. Review the skill, choose its owner, and plan any path fixes.
+3. `adopt --agent <agent> --skill <name> --to <owner>`, then make the path fixes.
+4. `install --dry-run` shows only this skill's actions.
+5. `install`.
+6. Use the skill on a small real task in a new session of each target agent.
+7. `doctor` is clean for this skill.
+8. Commit.
+
+Global instructions move the same way: first the current files unchanged, then one shared policy per step.
+
+### Rolling back one step
+
+1. Remove the step from the repository: before the commit, restore `manifest.json` and delete the adopted folder; after the commit, `git revert` it.
+2. `install --prune` removes the links that no longer have a manifest entry.
+3. `restore <backup-id>` puts back each local copy that the step's install backed up.
 
 ## Platform assumption
 
