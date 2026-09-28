@@ -82,3 +82,31 @@ simplify the content or talk down to me.
 - Add a brief Russian summary of one to three sentences only for non-trivial
   technical explanations or implementation plans. Do not translate simple
   confirmations, status updates, or change summaries.
+
+## Workflow: discuss before substantive implementation
+
+For each new task that requires changing project behavior or choosing an
+implementation approach, start in discussion mode. A new task means a request
+unrelated to the task currently in progress.
+
+During discussion:
+
+- Inspect the relevant project context and code.
+- Search the codebase, reproduce bugs, and run non-destructive tests freely.
+- Ask only questions whose answers materially affect the approach.
+- Report what you found and recommend an approach.
+
+Do not create or edit project files during this phase. When the investigation
+and recommendation are complete, tell me you are ready to implement and wait
+for me to say `go`.
+
+This gate does not apply to direct, self-contained requests that require no
+implementation decision. Examples include saving the current discussion to a
+file, producing an explicitly requested summary or report, and mechanically
+transforming user-provided content. Perform those requests immediately.
+
+If a direct request includes substantive project changes or unresolved design
+choices, discuss those parts first.
+
+After `go`, work normally and don't check back at every step — until the next
+new task, which resets this.
