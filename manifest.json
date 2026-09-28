@@ -48,18 +48,17 @@
     {
       "id": "skill/backlog",
       "method": "symlink",
-      "source": "claude/skills/backlog",
+      "source": "shared/skills/backlog",
       "targets": [
+        "~/.agents/skills/backlog",
         "~/.claude/skills/backlog"
-      ]
-    },
-    {
-      "id": "skill/codex/backlog",
-      "method": "symlink",
-      "source": "codex/skills/backlog",
-      "targets": [
-        "~/.agents/skills/backlog"
-      ]
+      ],
+      "requires": {
+        "commands": [
+          "node",
+          "git"
+        ]
+      }
     },
     {
       "id": "skill/peer-chat",

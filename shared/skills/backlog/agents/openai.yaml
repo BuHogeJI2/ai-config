@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backlog"
+  short_description: "File and check out-of-scope findings in a repo backlog"
+  default_prompt: "Use $backlog to list, check, or add items in this repository's backlog."

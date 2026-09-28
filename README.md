@@ -39,10 +39,10 @@ repository and make it yours:
 | `task-plan` | Codex | The Codex counterpart of `plan`. |
 | `codex-review` | Claude | Asks Codex for an independent review, then checks each finding. |
 | `claude-review` | Codex | Asks Claude for an independent review, then checks each finding. |
-| `backlog` | Claude, Codex | Files out-of-scope findings into a repo-local backlog and checks them later. |
+| `backlog` | both | Files out-of-scope findings into a repo-local backlog and checks them later. |
 | `peer-chat` | Claude, Codex | Lets Claude and Codex talk to each other in an agterm split. |
 
-`backlog` and `peer-chat` have one copy per agent, because each copy uses features of its own agent.
+`peer-chat` has one copy per agent, because each copy describes its own side of the chat.
 
 ## How it works
 

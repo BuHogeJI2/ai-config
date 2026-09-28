@@ -1,7 +1,6 @@
 ---
 name: backlog
 description: File and manage a repo-local backlog of issues, defects and improvements that surfaced during other work but are out of scope to fix now. Use it the moment you notice something worth attention later — a bug outside the current task, a fragile pattern, a missing test, a design problem — instead of only mentioning it in prose. Also handles reviewing the backlog (--list), re-checking whether an item is still real (--check), and adding one on request (--add <description>).
-argument-hint: "[--list | --check [slug] | --add <description>]"
 ---
 
 # Backlog
@@ -9,7 +8,9 @@ argument-hint: "[--list | --check [slug] | --add <description>]"
 A backlog item records something worth attention later, at the moment it is noticed, so it is not
 lost when the session ends.
 
-`$ARGUMENTS` selects the mode. No arguments → `--list`.
+The request selects the mode: a flag — `--list`, `--check [slug]`, `--add <description>` — or the same
+intent in plain words ("show the backlog", "is X still a problem?", "add this to the backlog"). An
+explicit invocation with no operation lists the backlog.
 Automatic activation for a finding means filing that finding, not listing as the final answer.
 
 ## Where items live
@@ -25,8 +26,8 @@ node "$S" path
 
 It chooses between two locations:
 
-- `<main repo root>/.tmp/backlog`, found through `git rev-parse --git-common-dir`. Shared with Codex
-  and every linked worktree, and it survives a worktree being deleted. Never versioned.
+- `<main repo root>/.tmp/backlog`, found through `git rev-parse --git-common-dir`. Shared by both
+  agents and every linked worktree, and it survives a worktree being deleted. Never versioned.
 - `<current checkout root>/docs/backlog`. Belongs to that checkout and can be versioned.
 
 Reuse the one that already exists, even if it holds only `resolved/` items. If neither exists, use
@@ -104,7 +105,7 @@ The `## Reasoning` section defends the label chosen. If it cannot, the label is 
 
 Copy `TEMPLATE.md` from the folder this `SKILL.md` was loaded from. Filename is a kebab-case slug of
 the title, placed in the directory `backlog.mjs path` prints (not its `resolved/`):
-`<backlog dir>/<slug>.md`.
+`<backlog dir>/<slug>.md`. Set `created:` to today's date.
 
 ```markdown
 ---
@@ -131,7 +132,8 @@ blocked: product owner must choose between X and Y
   carries no ordering. Omit when there is none.
 - `after:` — slugs that must be finished first, because doing this one before them would be undone or
   wrong. A dependency, not a theme. It clears itself: a slug stops blocking once that item is
-  resolved. Do not repeat an `after:` slug in `related:`.
+  resolved. Only a resolved item clears it: an unknown slug keeps blocking and `list` warns about it,
+  since it is usually a typo. Do not repeat an `after:` slug in `related:`.
 - `blocked:` — one line naming what this waits on when it is **not** another backlog item: a person's
   decision, an open PR, an external release. Say who or what unblocks it, not that it is blocked.
 
@@ -167,9 +169,9 @@ Use `list --json` when metadata such as `where:` is needed to support that obser
 
 Verify whether an item is still real. Someone may have fixed it, or the code it describes may be gone.
 
-1. **Choose the item.** If a slug was given, use it. Otherwise run `list --json` and pick with
-   `AskUserQuestion`: when there are more than 4 items, ask twice — first the priority band, then the
-   item inside it. If there are no items, report the empty backlog. Never guess which item the user meant.
+1. **Choose the item.** If a slug was given, use it. Otherwise run `list --json` and ask the user
+   with a short choice question, using your question tool when you have one. When there are more than 4
+   items, ask twice — first the priority band, then the item inside it. If there are no items, report the empty backlog. Never guess which item the user meant.
 2. **Read it:** `backlog.mjs show <slug>`.
 3. **Verify against the code as it is now.** Read every path in `where:`; with no `where:`, test the
    evidence or decision the body records. Run the command or test the item names, if it names one.
