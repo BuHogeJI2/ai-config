@@ -6,7 +6,7 @@ from pathlib import Path
 from .backups import Backup, create_backup, prune_backups
 from .fileops import TargetChangedError, move_aside, place_symlink, remove_path
 from .paths import is_below
-from .planner import CHANGES, CREATE, KEEP, RELINK, REMOVE_LEGACY, REPLACE, Action, Plan, effective_location
+from .planner import CHANGES, CREATE, KEEP, PRUNE, RELINK, REMOVE_LEGACY, REPLACE, Action, Plan, effective_location
 from .state import LinkRecord, State, save_state
 from .trees import TreeError, snapshot
 
@@ -36,9 +36,10 @@ def apply_plan(plan: Plan, repo_root: Path, state: State, state_dir: Path) -> li
             place_symlink(action.target, str(action.source), lambda: _unchanged(action, repo_root))
         elif action.kind == REPLACE:
             backups.append(_replace_with_link(action, repo_root, state_dir))
-        elif action.kind == REMOVE_LEGACY:
+        elif action.kind in (REMOVE_LEGACY, PRUNE):
             backups.append(create_backup(state_dir, action.target))
             remove_path(move_aside(action.target, lambda: _unchanged(action, repo_root)))
+            state.links.pop(action.target, None)
         if action.kind in (CREATE, RELINK, REPLACE):
             state.links[action.target] = LinkRecord(action.entry_id, str(action.source), repo_root)
         save_state(state_dir, state)
@@ -90,4 +91,6 @@ def _still_empty(action: Action, repo_root: Path) -> bool:
 
 
 def _source_is_valid(action: Action, repo_root: Path) -> bool:
+    if action.kind == PRUNE:
+        return True
     return action.source is not None and action.source.exists() and is_below(action.source.resolve(), repo_root)

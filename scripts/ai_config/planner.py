@@ -15,9 +15,11 @@ REPLACE = "replace"
 RELINK = "relink"
 REMOVE_LEGACY = "remove-legacy"
 ORPHAN = "orphan"
+PRUNE = "prune"
 CONFLICT = "conflict"
 
-CHANGES = (CREATE, REPLACE, RELINK, REMOVE_LEGACY)
+CHANGES = (CREATE, REPLACE, RELINK, REMOVE_LEGACY, PRUNE)
+_REPLACED_LOCAL = "replaced by the repository version (--replace-local); backed up first"
 
 
 @dataclass(frozen=True)
@@ -50,7 +52,19 @@ class Plan:
         return [action for action in self.actions if action.kind == ORPHAN]
 
 
-def build_plan(repo_root: Path, env: Environment, manifest: Manifest, state: State | None = None) -> Plan:
+def build_plan(
+    repo_root: Path,
+    env: Environment,
+    manifest: Manifest,
+    state: State | None = None,
+    prune: bool = False,
+    replace_local: frozenset[str] = frozenset(),
+) -> Plan:
+    """Plan every manifest target, the legacy Codex copies, and the orphan links.
+
+    `prune` turns orphans into removals. Entries named in `replace_local` replace local content that
+    differs from the repository instead of reporting a conflict; unsafe conflicts stay conflicts.
+    """
     repo_root = repo_root.resolve()
     state = state or State()
     claims = _Claims(repo_root)
@@ -59,12 +73,12 @@ def build_plan(repo_root: Path, env: Environment, manifest: Manifest, state: Sta
     for entry in manifest.entries:
         for target in entry.targets:
             path = env.expand(target)
-            actions += _plan_target(entry, path, repo_root, claims, state)
+            actions += _plan_target(entry, path, repo_root, claims, state, entry.id in replace_local)
             if path.parent == env.codex_skills and env.codex_legacy_skills_are_separate:
                 legacy.append((entry, repo_root / entry.sources[0], env.codex_legacy_skills / path.name))
     for entry, source, legacy_path in legacy:
-        actions += _plan_legacy_copy(entry, source, legacy_path, claims)
-    actions += _find_orphans(repo_root, env, manifest, claims, state)
+        actions += _plan_legacy_copy(entry, source, legacy_path, claims, entry.id in replace_local)
+    actions += _find_orphans(repo_root, env, manifest, claims, state, PRUNE if prune else ORPHAN)
     return Plan(tuple(actions))
 
 
@@ -115,17 +129,19 @@ def effective_location(path: Path) -> Path:
     return path.parent.resolve() / path.name
 
 
-def _plan_target(entry: Entry, target: Path, repo_root: Path, claims: _Claims, state: State) -> list[Action]:
+def _plan_target(
+    entry: Entry, target: Path, repo_root: Path, claims: _Claims, state: State, forced: bool
+) -> list[Action]:
     source = repo_root / entry.sources[0]
     problem = claims.claim(target)
     if problem:
         return [Action(CONFLICT, target, entry.id, source, f"target {problem}")]
     if entry.method != "symlink":
         return [Action(CONFLICT, target, entry.id, detail=f"the {entry.method} method is not supported yet")]
-    return [_plan_link(entry, source, target, repo_root, state)]
+    return [_plan_link(entry, source, target, repo_root, state, forced)]
 
 
-def _plan_link(entry: Entry, source: Path, target: Path, repo_root: Path, state: State) -> Action:
+def _plan_link(entry: Entry, source: Path, target: Path, repo_root: Path, state: State, forced: bool) -> Action:
     def action(kind: str, detail: str = "") -> Action:
         return _action(kind, target, entry.id, source, detail)
 
@@ -141,17 +157,25 @@ def _plan_link(entry: Entry, source: Path, target: Path, repo_root: Path, state:
             return action(RELINK, f"link points to another repository path: {destination}")
         if is_link_from_moved_checkout(target, state, repo_root):
             return action(RELINK, f"link still points into the old checkout {state.links[target].repo_root}")
+        if forced:
+            return action(REPLACE, f"link to {destination} {_REPLACED_LOCAL}")
         if not target.exists():
             return action(CONFLICT, f"broken link to {destination}")
         return action(CONFLICT, f"link points outside this repository: {destination}")
     if not target.exists():
         return action(CREATE)
     return _compare(
-        action, source, target, REPLACE, "local copy is identical and is backed up first", "local content differs from the repository"
+        action,
+        source,
+        target,
+        REPLACE,
+        "local copy is identical and is backed up first",
+        "local content differs from the repository",
+        forced,
     )
 
 
-def _plan_legacy_copy(entry: Entry, source: Path, legacy: Path, claims: _Claims) -> list[Action]:
+def _plan_legacy_copy(entry: Entry, source: Path, legacy: Path, claims: _Claims, forced: bool) -> list[Action]:
     def action(kind: str, detail: str = "") -> Action:
         return _action(kind, legacy, entry.id, source, detail)
 
@@ -163,6 +187,8 @@ def _plan_legacy_copy(entry: Entry, source: Path, legacy: Path, claims: _Claims)
     if legacy.is_symlink():
         if link_destination(legacy) == source:
             return [action(REMOVE_LEGACY, "legacy Codex link to the same source")]
+        if forced:
+            return [action(REMOVE_LEGACY, f"legacy Codex link to {link_destination(legacy)} {_REPLACED_LOCAL}")]
         return [action(CONFLICT, f"legacy Codex link points to {link_destination(legacy)}")]
     if not legacy.exists():
         return []
@@ -176,6 +202,7 @@ def _plan_legacy_copy(entry: Entry, source: Path, legacy: Path, claims: _Claims)
             REMOVE_LEGACY,
             "legacy Codex copy is identical and is backed up first",
             "legacy Codex copy differs from the repository",
+            forced,
         )
     ]
 
@@ -190,23 +217,29 @@ def _action(kind: str, target: Path, entry_id: str | None, source: Path | None, 
     return Action(kind, target, entry_id, source, detail, effective_location(target), expected)
 
 
-def _compare(action, source: Path, local: Path, same_kind: str, same_detail: str, different_detail: str) -> Action:
+def _compare(
+    action, source: Path, local: Path, same_kind: str, same_detail: str, different_detail: str, forced: bool
+) -> Action:
     try:
         same = identical(source, local)
     except TreeError as error:
         return action(CONFLICT, f"cannot compare: {error}")
-    return action(same_kind, same_detail) if same else action(CONFLICT, different_detail)
+    if same:
+        return action(same_kind, same_detail)
+    if forced:
+        return action(same_kind, f"{different_detail}; {_REPLACED_LOCAL}")
+    return action(CONFLICT, different_detail)
 
 
 def _find_orphans(
-    repo_root: Path, env: Environment, manifest: Manifest, claims: _Claims, state: State
+    repo_root: Path, env: Environment, manifest: Manifest, claims: _Claims, state: State, kind: str
 ) -> list[Action]:
     orphans = []
     for link in _orphan_candidates(env, manifest):
         ours = points_into(link, repo_root) or is_link_from_moved_checkout(link, state, repo_root)
         if ours and not claims.is_claimed(link) and claims.claim(link) is None:
             orphans.append(
-                _action(ORPHAN, link, None, None, f"link into this repository has no manifest entry: {link_destination(link)}")
+                _action(kind, link, None, None, f"link into this repository has no manifest entry: {link_destination(link)}")
             )
     return orphans
 
