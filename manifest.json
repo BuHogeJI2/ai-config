@@ -44,6 +44,22 @@
         "~/.agents/skills/commit-me",
         "~/.claude/skills/commit-me"
       ]
+    },
+    {
+      "id": "skill/backlog",
+      "method": "symlink",
+      "source": "claude/skills/backlog",
+      "targets": [
+        "~/.claude/skills/backlog"
+      ]
+    },
+    {
+      "id": "skill/codex/backlog",
+      "method": "symlink",
+      "source": "codex/skills/backlog",
+      "targets": [
+        "~/.agents/skills/backlog"
+      ]
     }
   ]
 }
