@@ -1,5 +1,16 @@
 {
   "version": 1,
-  "external": ["agterm"],
-  "entries": []
+  "external": [
+    "agterm"
+  ],
+  "entries": [
+    {
+      "id": "skill/task-plan",
+      "method": "symlink",
+      "source": "codex/skills/task-plan",
+      "targets": [
+        "~/.agents/skills/task-plan"
+      ]
+    }
+  ]
 }
