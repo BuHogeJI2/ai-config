@@ -26,13 +26,16 @@ The migration must not be a "big bang". Each skill and each instruction section 
 - **Instructions move in two stages.** First a baseline that changes nothing: the current files move into the repository as they are, and `shared/instructions.md` is empty. Then one policy at a time moves into `shared/instructions.md`, with one commit each. Rejected: writing the shared file in one go, because a changed wording that affects agent behavior would be hard to find.
 - **Python 3.9 standard library, JSON manifest.** Decided when `DESIGN.md` was reviewed: the system Python is 3.9.6, has no TOML reader, and no packages should be installed on each device.
 - **Edits through a link reach the repository in both agents.** Checked in phase 8 on 2026-09-28: Claude's and Codex's own edit tools changed the repository file and kept the link. Codex needs the repository folder to be writable in its sandbox; the details are in `DESIGN.md` (Discovery check).
+- **Skill owners settled during migration.** `styles-handling` was obsolete and deleted. `commit-me` is shared: the Claude text is newer and stricter, and the Codex folded description fixes invalid YAML. `backlog` stays two agent-specific skills to keep the migration small; merging them is a backlog item. `peer-chat` is two skills because each describes one side of the chat.
+- **`peer-chat.py` stays outside the repository.** It is a pinned, unmodified agterm cookbook script tied to the agterm version. The repository records its upstream commit and hash and a manual install recipe instead of copying or downloading it. Rejected: vendoring it, which needs its own install and update design, and downloading it automatically, which would make the tool fetch and run code from the network.
+- **The repository is public.** It holds no personal information or secrets; see `DESIGN.md` (Security).
 - **Commit a migrated skill only after it passed the test in the agent.** Before the commit, rollback is `git checkout`/`git clean` of the skill folder plus `install --prune` and `restore`. After the commit, it is `git revert` plus the same two commands.
 
 ## Assumptions
 
 - Tool code lives in a package, `scripts/ai_config/`. `scripts/ai-config` is a short executable entry point that imports it. A single file without a `.py` extension would be hard to import in tests.
 - Tests use `unittest` and run with `python3 -m unittest discover -s tests -t .` from the repository root. `tests/__init__.py` adds `scripts/` to the import path.
-- `SKILL.md` frontmatter is read by a small parser for top-level `key: value` lines between the `---` markers. There is no YAML library in the standard library. All current skills use single-line `name` and `description`.
+- `SKILL.md` frontmatter is read by a small parser for top-level `key: value` lines between the `---` markers. There is no YAML library in the standard library. A block value such as `description: >-` is read as its marker, which is enough because `doctor` only checks that `name` and `description` are present.
 - The duplicate-name check also scans plugin skills (`~/.claude/plugins/**/skills/*/SKILL.md`, excluding `.trash`, and `~/.codex/plugins/cache/**/skills/*/SKILL.md`). A plugin name collision is a warning, not an error, because plugin skills are shown with a plugin prefix.
 - `adopt` gets a `--to shared|codex|claude` option, which `DESIGN.md` does not have yet. Without it, a skill adopted from one agent cannot be placed in `shared/`.
 - Commit types follow the user's rules: `docs:` for documentation only, `feat:` for tool code with its tests, `test:` for test-only changes, `feat: migrate <name> skill` for a migration step.
@@ -199,11 +202,12 @@ If a check fails, stop and revise the design before phase 10.
   |------|-------|-----------|-------|----------|
   | 10.1 | `task-plan` | Codex (`~/.codex/skills`) | codex | No scripts. First test of legacy-location removal. |
   | 10.2 | `plan` | Claude | claude | No scripts. First real Claude skill. |
-  | 10.3 | `styles-handling` | Codex (`~/.agents/skills`) | to decide | Replaces a real folder inside the target location. See open questions. |
+  | 10.3 | `styles-handling` | Codex (`~/.agents/skills`) | deleted | Obsolete; removed with a backup instead of migrated. |
   | 10.4 | `claude-review` | Codex (`~/.codex/skills`) | codex | Has scripts and a test file; checks that executable bits survive. |
   | 10.5 | `codex-review` | Claude | claude | The review tool in daily use. Do not run it during a review. |
-  | 10.6 | `commit-me` | both, different | to decide | Used for every commit and differs between agents. |
-  | 10.7 | `backlog` | both, different | to decide | Differs between agents and names its own files by absolute path. |
+  | 10.6 | `commit-me` | both, different | shared | Used for every commit and differs between agents. |
+  | 10.7 | `backlog` | both, different | claude, codex | Differs between agents and names its own files by absolute path. |
+  | 10.8 | `peer-chat` | both, one side each | claude, codex | Appeared after planning. Needs `peer-chat.py`, which is not in the repository. |
 
 - **Verification:** the procedure above, for each step.
 - **Done when:** `doctor` shows no unmanaged personal skills except external ones and the skills that Codex or Claude install themselves.
@@ -217,7 +221,7 @@ If a check fails, stop and revise the design before phase 10.
     - `instructions/claude`: `symlink` to `~/.claude/CLAUDE.md`;
     - `instructions/shared-claude`: `symlink` to `~/.claude/rules/shared.md`;
     - `instructions/codex`: `compose` to `~/.codex/AGENTS.md`.
-  - Check both files for machine-specific content first.
+  - Check both files for machine-specific content and personal information first; the repository is public.
   - Run `install --dry-run`, then `install`. `diff` of the new `AGENTS.md` against its backup shows only the marker.
   - Commit: `feat: move global instructions into repository`.
 - **11.2 onward, one policy per step:**
@@ -233,7 +237,7 @@ If a check fails, stop and revise the design before phase 10.
 ### Phase 12 — README
 
 - **Goal:** someone who was not in this conversation can install, update, add a skill, resolve a conflict, restore a backup, and uninstall.
-- **Changes:** `README.md`.
+- **Changes:** `README.md`, written for anyone who wants to reuse the public skills. It lists the prerequisites (Python 3.9+, `node`, and for `peer-chat` the agterm app and `peer-chat.py` with its pinned install recipe).
 - **Verification:** follow the README in a fake home (`HOME=$(mktemp -d)`) from a fresh clone.
 - **Done when:** every command in the README works as written.
 - **Commit:** `docs: add README`
@@ -272,7 +276,4 @@ If a check fails, stop and revise the design before phase 10.
 
 | Question | What's unclear | Why it matters | Needed by |
 |----------|---------------|----------------|-----------|
-| What is `styles-handling`? | It has no description and `disable-model-invocation: true`. It may be Codex-only, shared, or obsolete. | It decides whether it is adopted, and to which owner, or deleted. | Step 10.3 |
-| Is `commit-me` merged into `shared/` or kept as two agent-specific skills? | The two versions differ; the Codex one also has `agents/openai.yaml`. | A shared skill needs one wording that works in both agents; keeping two keeps the drift. | Step 10.6 |
-| Is `backlog` merged into `shared/` or kept as two? | The versions differ, and the Claude one names `~/.claude/skills/backlog/...` for its own files. | Sharing it requires relative paths and one version of `backlog.mjs`. | Step 10.7 |
 | Is a second device available? | Not discussed. | Without it, phase 13 cannot run, and multi-device behavior stays untested. | Phase 13 |

@@ -144,6 +144,8 @@ Shared skills use only features supported by both agents. Agent-specific frontma
 
 A skill refers to its own files by paths relative to the skill folder, never by an install location such as `~/.claude/skills/<name>/...` or `~/.codex/skills/<name>/...`. Install locations differ between agents and change during migration.
 
+Skills run through links, so a bundled script that checks whether it is the entry point must compare real paths. A Node check `import.meta.url === pathToFileURL(process.argv[1]).href` is false when the script is called through a linked folder, and the script silently does nothing; resolve `process.argv[1]` with `fs.realpathSync` first.
+
 ### Discovery check
 
 Checked on 2026-09-28 with a throwaway skill and rules file installed by the tool (Codex CLI 0.157, Claude Code), each in a fresh headless session that saved no history:
@@ -323,7 +325,9 @@ The repository must not contain:
 - Downloaded plugins, marketplace caches, or cloud-synchronized skills.
 - Device identifiers, project trust records, or automatic permission grants.
 
-A private Git repository is not treated as secret storage. `.gitignore`, local validation, and secret scanning provide separate layers of protection. `adopt` runs the same checks before importing local content.
+The repository is public, so it must also not contain personal information: names, email addresses, user names, absolute home paths, host names, private project, employer, or client names, and private URLs. Instructions and skills state preferences and workflows, not who the user is or what they work on.
+
+`.gitignore`, local validation, and secret scanning provide separate layers of protection. `adopt` runs the same checks before importing local content.
 
 Scripts inside skills are executable capabilities. Their code, dependencies, requested permissions, and data access must be reviewable. Synced content must not silently grant broad filesystem, shell, network, or external-service access.
 
@@ -391,13 +395,18 @@ Ordinary changes are recorded in Git history. Incompatible changes to the manife
 
 ## Initial migration notes
 
-The existing local configuration contains these known cases:
+Skill migration finished on 2026-09-28 with these results:
 
 - `agterm` is external. It stays app-managed and is not migrated.
-- `backlog` and `commit-me` differ between agents and require review before classification. The Claude `backlog` names its own files by install location and must switch to relative paths.
+- `commit-me` is one shared skill: the Claude text, the Codex frontmatter (a folded description, because the Claude one-line description was not valid YAML), and the Codex `agents/openai.yaml`.
+- `backlog` stays two agent-specific skills for now, both with relative paths to their own files. Merging them is a backlog item.
+- `peer-chat` is two agent-specific skills, one for each side of the chat. Both need `peer-chat.py` on `PATH`, a script from the agterm cookbook that is not in this repository; its entries declare it in `requires`, and the install recipe is a backlog item.
 - Codex `claude-review` and `task-plan` are counterparts to Claude `codex-review` and `plan`. They stay agent-specific.
-- `styles-handling` exists only under `~/.agents/skills` and requires classification.
+- `styles-handling` was obsolete and was deleted, not migrated.
 - `~/.claude/skills/synced/` is cloud-synchronized and never managed.
+
+Instructions are migrated next, and these cases remain:
+
 - `~/.codex/AGENTS.md` and `~/.claude/CLAUDE.md` state the same policies in different words. Migration chooses one wording for `shared/instructions.md`.
 - `~/.claude/rules/` does not exist yet and is created by the first install.
 
