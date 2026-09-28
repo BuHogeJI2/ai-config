@@ -35,6 +35,15 @@
       "targets": [
         "~/.claude/skills/codex-review"
       ]
+    },
+    {
+      "id": "skill/commit-me",
+      "method": "symlink",
+      "source": "shared/skills/commit-me",
+      "targets": [
+        "~/.agents/skills/commit-me",
+        "~/.claude/skills/commit-me"
+      ]
     }
   ]
 }

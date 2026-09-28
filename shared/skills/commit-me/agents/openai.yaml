@@ -1,0 +1,4 @@
+interface:
+  display_name: "Commit Me"
+  short_description: "Create repo-native commits only when requested"
+  default_prompt: "Use $commit-me to prepare and create the requested Git commit."
