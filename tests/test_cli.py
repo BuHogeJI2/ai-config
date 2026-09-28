@@ -1,5 +1,8 @@
 import io
-from contextlib import redirect_stderr
+import os
+import stat
+
+from ai_config.state import exclusive_lock
 
 from ai_config.cli import main
 from tests.helpers import FakeWorldTestCase, skill_entry
@@ -66,15 +69,52 @@ class InstallDryRunTest(FakeWorldTestCase):
         self.assertEqual(code, 0)
         self.assertEqual(lines[-2:], ["1 orphan link(s): removed only with --prune.", "Nothing to change."])
 
-    def test_install_without_dry_run_is_not_available_yet(self):
-        with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
-            main(["install"], environ={"HOME": str(self.home)}, repo_root=self.repo)
-
     def test_invalid_manifest(self):
         self.write(self.repo / "manifest.json", "{")
         code, lines = self.run_cli("install", "--dry-run")
         self.assertEqual(code, 1)
         self.assertTrue(lines[0].startswith("error    manifest: manifest.json is not valid JSON"))
+
+
+class InstallTest(FakeWorldTestCase):
+    run_cli = InstallDryRunTest.run_cli
+
+    def test_empty_manifest_creates_only_the_private_state_folder(self):
+        self.assertEqual(self.run_cli("install"), (0, ["Nothing to change.", "Applied 0 change(s)."]))
+        self.assertEqual(sorted(path.name for path in self.env.state_dir.iterdir()), ["lock", "state.json"])
+        self.assertEqual(stat.S_IMODE(self.env.state_dir.stat().st_mode), 0o700)
+        self.assertEqual(sorted(path.name for path in self.home.iterdir()), [".local"])
+
+    def test_applies_changes_and_lists_backups(self):
+        source = self.add_skill(self.repo / "claude/skills", "plan")
+        self.add_skill(self.env.claude_skills, "plan")
+        self.write_manifest([skill_entry("claude", "plan")])
+        code, lines = self.run_cli("install")
+        self.assertEqual(code, 0)
+        self.assertEqual(lines[0], "replace        ~/.claude/skills/plan: local copy is identical and is backed up first")
+        self.assertTrue(lines[2].startswith("backup         ~/.claude/skills/plan: "))
+        self.assertEqual(lines[-1], "Applied 1 change(s).")
+        self.assertEqual(os.readlink(self.env.claude_skills / "plan"), str(source))
+
+    def test_conflict_writes_nothing(self):
+        self.add_skill(self.repo / "claude/skills", "plan")
+        self.add_skill(self.repo / "claude/skills", "other")
+        self.add_skill(self.env.claude_skills, "plan", description="Local edit.")
+        self.write_manifest([skill_entry("claude", "plan"), skill_entry("claude", "other")])
+        code, lines = self.run_cli("install")
+        self.assertEqual(code, 1)
+        self.assertFalse((self.env.claude_skills / "other").exists())
+        self.assertFalse(os.path.exists(self.env.state_dir / "state.json"))
+
+    def test_another_run_holding_the_lock_is_an_error(self):
+        with exclusive_lock(self.env.state_dir):
+            self.assertEqual(self.run_cli("install"), (1, ["error    another ai-config run holds the lock"]))
+
+    def test_invalid_state_is_an_error(self):
+        self.write(self.env.state_dir / "state.json", "{")
+        code, lines = self.run_cli("install")
+        self.assertEqual(code, 1)
+        self.assertIn("is not valid JSON", lines[0])
 
 
 class DiffTest(FakeWorldTestCase):

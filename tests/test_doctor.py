@@ -1,4 +1,5 @@
 from ai_config.doctor import ERROR, INFO, WARNING, run_doctor
+from ai_config.state import LinkRecord, State, save_state
 from tests.helpers import FakeWorldTestCase, skill_entry
 
 FAKE_API_KEY = "sk-" + "a1B2" * 8
@@ -133,6 +134,31 @@ class LocalSkillChecksTest(DoctorTestCase):
         self.assertFinding(INFO, "external codex skill: ~/.codex/skills/agterm")
         self.assertFinding(WARNING, "external claude skill links into this repository: ~/.claude/skills/agterm")
         self.assertFalse(any("unmanaged" in message for message in self.findings()))
+
+
+class StateChecksTest(DoctorTestCase):
+    def test_invalid_state_is_an_error(self):
+        self.write(self.env.state_dir / "state.json", "{")
+        self.assertFinding(ERROR, "state: ")
+
+    def test_other_repository_root_and_changed_links_are_warnings(self):
+        target = self.env.claude_skills / "plan"
+        self.link(target, self.home / "elsewhere")
+        moved = self.env.codex_skills / "plan"
+        self.link(moved, self.home / "old-repo/codex/skills/plan")
+        old_root = self.home / "old-repo"
+        save_state(
+            self.env.state_dir,
+            State(
+                old_root,
+                {
+                    target: LinkRecord("skill/plan", "/old/plan", old_root),
+                    moved: LinkRecord("skill/plan", str(old_root / "codex/skills/plan"), old_root),
+                },
+            ),
+        )
+        self.assertFinding(WARNING, "state: recorded link was changed or removed: ~/.claude/skills/plan")
+        self.assertFinding(WARNING, "state: ~/.agents/skills/plan points into another checkout")
 
 
 class InstallPlanChecksTest(DoctorTestCase):

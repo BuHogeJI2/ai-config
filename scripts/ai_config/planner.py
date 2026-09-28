@@ -5,8 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .manifest import Entry, Manifest, is_manageable_name
-from .paths import Environment
-from .trees import TreeError, identical
+from .paths import Environment, is_below
+from .state import State
+from .trees import TreeError, identical, snapshot
 
 CREATE = "create"
 KEEP = "ok"
@@ -21,11 +22,15 @@ CHANGES = (CREATE, REPLACE, RELINK, REMOVE_LEGACY)
 
 @dataclass(frozen=True)
 class Action:
+    """One planned step. Changes carry where the target really was and what it looked like when planned."""
+
     kind: str
     target: Path
     entry_id: str | None = None
     source: Path | None = None
     detail: str = ""
+    location: Path | None = None
+    expected: tuple | None = None
 
 
 @dataclass(frozen=True)
@@ -45,20 +50,21 @@ class Plan:
         return [action for action in self.actions if action.kind == ORPHAN]
 
 
-def build_plan(repo_root: Path, env: Environment, manifest: Manifest) -> Plan:
+def build_plan(repo_root: Path, env: Environment, manifest: Manifest, state: State | None = None) -> Plan:
     repo_root = repo_root.resolve()
+    state = state or State()
     claims = _Claims(repo_root)
     actions: list[Action] = []
     legacy: list[tuple[Entry, Path, Path]] = []
     for entry in manifest.entries:
         for target in entry.targets:
             path = env.expand(target)
-            actions += _plan_target(entry, path, repo_root, claims)
+            actions += _plan_target(entry, path, repo_root, claims, state)
             if path.parent == env.codex_skills and env.codex_legacy_skills_are_separate:
                 legacy.append((entry, repo_root / entry.sources[0], env.codex_legacy_skills / path.name))
     for entry, source, legacy_path in legacy:
         actions += _plan_legacy_copy(entry, source, legacy_path, claims)
-    actions += _find_orphans(repo_root, env, manifest, claims)
+    actions += _find_orphans(repo_root, env, manifest, claims, state)
     return Plan(tuple(actions))
 
 
@@ -71,7 +77,7 @@ class _Claims:
 
     def claim(self, path: Path) -> str | None:
         location = effective_location(path)
-        if _is_below(location, self.repo_root):
+        if is_below(location, self.repo_root):
             return f"location resolves into the repository: {location}"
         if location in self.owners:
             return f"same location as {self.owners[location]}"
@@ -89,7 +95,19 @@ def link_destination(link: Path) -> Path:
 
 
 def points_into(link: Path, repo_root: Path) -> bool:
-    return link.is_symlink() and _is_below(link_destination(link), repo_root.resolve())
+    return link.is_symlink() and is_below(link_destination(link), repo_root.resolve())
+
+
+def is_link_from_moved_checkout(link: Path, state: State, repo_root: Path) -> bool:
+    """True when the state file records `link` with its current text, and it points into the checkout it came from."""
+    record = state.links.get(link)
+    return (
+        record is not None
+        and record.repo_root != repo_root
+        and link.is_symlink()
+        and os.readlink(link) == record.link_text
+        and is_below(link_destination(link), record.repo_root)
+    )
 
 
 def effective_location(path: Path) -> Path:
@@ -97,23 +115,23 @@ def effective_location(path: Path) -> Path:
     return path.parent.resolve() / path.name
 
 
-def _plan_target(entry: Entry, target: Path, repo_root: Path, claims: _Claims) -> list[Action]:
+def _plan_target(entry: Entry, target: Path, repo_root: Path, claims: _Claims, state: State) -> list[Action]:
     source = repo_root / entry.sources[0]
     problem = claims.claim(target)
     if problem:
         return [Action(CONFLICT, target, entry.id, source, f"target {problem}")]
     if entry.method != "symlink":
         return [Action(CONFLICT, target, entry.id, detail=f"the {entry.method} method is not supported yet")]
-    return [_plan_link(entry, source, target, repo_root)]
+    return [_plan_link(entry, source, target, repo_root, state)]
 
 
-def _plan_link(entry: Entry, source: Path, target: Path, repo_root: Path) -> Action:
+def _plan_link(entry: Entry, source: Path, target: Path, repo_root: Path, state: State) -> Action:
     def action(kind: str, detail: str = "") -> Action:
-        return Action(kind, target, entry.id, source, detail)
+        return _action(kind, target, entry.id, source, detail)
 
     if not source.exists():
         return action(CONFLICT, "repository source does not exist")
-    if not _is_below(source.resolve(), repo_root):
+    if not is_below(source.resolve(), repo_root):
         return action(CONFLICT, f"repository source resolves outside the repository: {source.resolve()}")
     if target.is_symlink():
         destination = link_destination(target)
@@ -121,6 +139,8 @@ def _plan_link(entry: Entry, source: Path, target: Path, repo_root: Path) -> Act
             return action(KEEP)
         if points_into(target, repo_root):
             return action(RELINK, f"link points to another repository path: {destination}")
+        if is_link_from_moved_checkout(target, state, repo_root):
+            return action(RELINK, f"link still points into the old checkout {state.links[target].repo_root}")
         if not target.exists():
             return action(CONFLICT, f"broken link to {destination}")
         return action(CONFLICT, f"link points outside this repository: {destination}")
@@ -133,7 +153,7 @@ def _plan_link(entry: Entry, source: Path, target: Path, repo_root: Path) -> Act
 
 def _plan_legacy_copy(entry: Entry, source: Path, legacy: Path, claims: _Claims) -> list[Action]:
     def action(kind: str, detail: str = "") -> Action:
-        return Action(kind, legacy, entry.id, source, detail)
+        return _action(kind, legacy, entry.id, source, detail)
 
     if not os.path.lexists(legacy):
         return []
@@ -160,6 +180,16 @@ def _plan_legacy_copy(entry: Entry, source: Path, legacy: Path, claims: _Claims)
     ]
 
 
+def _action(kind: str, target: Path, entry_id: str | None, source: Path | None, detail: str) -> Action:
+    if kind == CONFLICT:
+        return Action(kind, target, entry_id, source, detail)
+    try:
+        expected = snapshot(target)
+    except TreeError as error:
+        return Action(CONFLICT, target, entry_id, source, f"cannot read: {error}")
+    return Action(kind, target, entry_id, source, detail, effective_location(target), expected)
+
+
 def _compare(action, source: Path, local: Path, same_kind: str, same_detail: str, different_detail: str) -> Action:
     try:
         same = identical(source, local)
@@ -168,12 +198,15 @@ def _compare(action, source: Path, local: Path, same_kind: str, same_detail: str
     return action(same_kind, same_detail) if same else action(CONFLICT, different_detail)
 
 
-def _find_orphans(repo_root: Path, env: Environment, manifest: Manifest, claims: _Claims) -> list[Action]:
+def _find_orphans(
+    repo_root: Path, env: Environment, manifest: Manifest, claims: _Claims, state: State
+) -> list[Action]:
     orphans = []
     for link in _orphan_candidates(env, manifest):
-        if points_into(link, repo_root) and not claims.is_claimed(link) and claims.claim(link) is None:
+        ours = points_into(link, repo_root) or is_link_from_moved_checkout(link, state, repo_root)
+        if ours and not claims.is_claimed(link) and claims.claim(link) is None:
             orphans.append(
-                Action(ORPHAN, link, detail=f"link into this repository has no manifest entry: {link_destination(link)}")
+                _action(ORPHAN, link, None, None, f"link into this repository has no manifest entry: {link_destination(link)}")
             )
     return orphans
 
@@ -193,11 +226,3 @@ def _orphan_candidates(env: Environment, manifest: Manifest) -> list[Path]:
             ):
                 candidates.append(child)
     return candidates
-
-
-def _is_below(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-    except ValueError:
-        return False
-    return True

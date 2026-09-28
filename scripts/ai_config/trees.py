@@ -26,6 +26,15 @@ def signature(path: Path) -> Signature:
     return tree
 
 
+def snapshot(path: Path) -> tuple:
+    """Describe what is at `path` now: missing, a link with its text, or a tree signature."""
+    if not os.path.lexists(path):
+        return ("missing",)
+    if path.is_symlink():
+        return ("link", os.readlink(path))
+    return ("tree", tuple(sorted(signature(path).items())))
+
+
 def identical(first: Path, second: Path) -> bool:
     return signature(first) == signature(second)
 

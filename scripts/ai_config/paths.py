@@ -49,14 +49,14 @@ class Environment:
         return self.home.joinpath(*rest.parts)
 
     def shorten(self, path: Path) -> str:
-        if _is_below(path, self.home):
+        if is_below(path, self.home):
             return "~/" + path.relative_to(self.home).as_posix()
-        if _is_below(path, self.codex_home):
+        if is_below(path, self.codex_home):
             return "$CODEX_HOME/" + path.relative_to(self.codex_home).as_posix()
         return str(path)
 
 
-def _is_below(path: Path, root: Path) -> bool:
+def is_below(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
     except ValueError:

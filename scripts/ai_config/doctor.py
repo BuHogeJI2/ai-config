@@ -10,6 +10,7 @@ from .manifest import OWNERS, Manifest, ManifestError, load_manifest, skill_targ
 from .paths import Environment
 from .planner import CHANGES, CONFLICT, ORPHAN, build_plan, points_into
 from .skills import LocalSkill, discover, read_frontmatter
+from .state import State, StateError, load_state
 
 ERROR = "error"
 WARNING = "warning"
@@ -53,12 +54,14 @@ def run_doctor(repo_root: Path, env: Environment) -> list[Finding]:
         findings += [Finding(ERROR, f"manifest: {problem}") for problem in error.problems]
         manifest = Manifest(external=(), entries=())
 
+    state, state_findings = _check_state(repo_root, env)
+    findings += state_findings
     local_skills = discover(env)
     findings += _check_entries(repo_root, manifest)
     findings += _check_repo_skills(repo_root, manifest)
     findings += _check_duplicates(local_skills, env)
     findings += _check_local_skills(local_skills, manifest, repo_root, env)
-    findings += _check_install_plan(repo_root, env, manifest)
+    findings += _check_install_plan(repo_root, env, manifest, state)
     findings += _check_repo_content(repo_root)
     return findings
 
@@ -151,9 +154,25 @@ def _check_local_skills(
     return findings
 
 
-def _check_install_plan(repo_root: Path, env: Environment, manifest: Manifest) -> list[Finding]:
+def _check_state(repo_root: Path, env: Environment) -> tuple[State, list[Finding]]:
+    try:
+        state = load_state(env.state_dir)
+    except StateError as error:
+        return State(), [Finding(ERROR, f"state: {error}")]
     findings = []
-    for action in build_plan(repo_root, env, manifest).actions:
+    for target, record in sorted(state.links.items()):
+        if not target.is_symlink() or os.readlink(target) != record.link_text:
+            findings.append(Finding(WARNING, f"state: recorded link was changed or removed: {env.shorten(target)}"))
+        elif record.repo_root != repo_root.resolve():
+            findings.append(
+                Finding(WARNING, f"state: {env.shorten(target)} points into another checkout {record.repo_root}; install relinks it")
+            )
+    return state, findings
+
+
+def _check_install_plan(repo_root: Path, env: Environment, manifest: Manifest, state: State) -> list[Finding]:
+    findings = []
+    for action in build_plan(repo_root, env, manifest, state).actions:
         shown = env.shorten(action.target)
         if action.kind == CONFLICT:
             findings.append(Finding(ERROR, f"install conflict at {shown}: {action.detail}"))

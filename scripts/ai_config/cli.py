@@ -7,9 +7,12 @@ from pathlib import Path
 from typing import Mapping, Sequence, TextIO
 
 from .doctor import ERROR, LEVELS, WARNING, run_doctor
+from .fileops import TargetChangedError
+from .installer import apply_plan
 from .manifest import Entry, Manifest, ManifestError, load_manifest
 from .paths import REPO_ROOT, Environment
 from .planner import CONFLICT, CREATE, RELINK, Plan, build_plan, link_destination
+from .state import StateError, exclusive_lock, load_state
 from .trees import TreeError, describe_differences
 
 
@@ -23,7 +26,7 @@ def main(
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor", help="report problems without changing anything")
     install = commands.add_parser("install", help="link and generate managed files")
-    install.add_argument("--dry-run", action="store_true", required=True, help="print the plan without changing anything")
+    install.add_argument("--dry-run", action="store_true", help="print the plan without changing anything")
     diff = commands.add_parser("diff", help="show how a local target differs from the repository")
     diff.add_argument("id", help="manifest entry id")
     args = parser.parse_args(argv)
@@ -41,8 +44,27 @@ def main(
             print(f"error    manifest: {problem}", file=out)
         return 1
     if args.command == "install":
-        return _print_plan(build_plan(repo_root, env, manifest), repo_root, env, out)
+        return _install(manifest, repo_root, env, out, dry_run=args.dry_run)
     return _diff(args.id, manifest, repo_root, env, out)
+
+
+def _install(manifest: Manifest, repo_root: Path, env: Environment, out: TextIO, dry_run: bool) -> int:
+    try:
+        if dry_run:
+            return _print_plan(build_plan(repo_root, env, manifest, load_state(env.state_dir)), repo_root, env, out)
+        with exclusive_lock(env.state_dir):
+            state = load_state(env.state_dir)
+            plan = build_plan(repo_root, env, manifest, state)
+            if _print_plan(plan, repo_root, env, out):
+                return 1
+            backups = apply_plan(plan, repo_root, state, env.state_dir)
+    except (StateError, TargetChangedError, TreeError) as error:
+        print(f"error    {error}", file=out)
+        return 1
+    for backup in backups:
+        print(f"backup         {env.shorten(backup.target)}: {backup.id}", file=out)
+    print(f"Applied {len(plan.changes)} change(s).", file=out)
+    return 0
 
 
 def _doctor(repo_root: Path, env: Environment, out: TextIO) -> int:
