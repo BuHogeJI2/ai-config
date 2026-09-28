@@ -12,7 +12,9 @@ This is the rule the skill exists for.
 
 Finishing a task is not a request to commit. Neither is a green test run, a completed refactor, a tidy stopping point, or the user going quiet after you finish. Deciding when work becomes a commit depends on their branch strategy, their review process, and what else they intend to fold in — context you don't have and can't infer from the diff.
 
-**Counts as asking:** "commit", "commit this", "push it", "land it", "fix X and commit it". An explicit instruction to commit, in some form.
+**Counts as asking:** "commit", "commit this", "fix X and commit it". An explicit instruction to commit, in some form.
+
+**"Push it" and "land it" are not a request to commit.** They cover commits that already exist. If there are uncommitted changes, ask whether to commit them first; do not create a commit on your own to have something to push.
 
 **Does not count:** "fix the bug", "make the tests pass", "clean this up", "that looks good", "go with phase 3". These are requests to change code. The change is the deliverable; the commit is a separate decision that stays with the user.
 
