@@ -8,9 +8,10 @@ from typing import Mapping, Sequence, TextIO
 
 from .doctor import ERROR, LEVELS, WARNING, run_doctor
 from .fileops import TargetChangedError
+from .adopt import AGENTS, AdoptError, adopt
 from .backups import list_backups
 from .installer import apply_plan
-from .manifest import Entry, Manifest, ManifestError, load_manifest
+from .manifest import OWNERS, Entry, Manifest, ManifestError, load_manifest
 from .paths import REPO_ROOT, Environment
 from .planner import CONFLICT, CREATE, RELINK, Plan, build_plan, link_destination
 from .restore import RestoreError, restore_backup
@@ -40,6 +41,13 @@ def main(
     )
     diff = commands.add_parser("diff", help="show how a local target differs from the repository")
     diff.add_argument("id", help="manifest entry id")
+    adopt_command = commands.add_parser("adopt", help="copy a local skill into the repository and add its manifest entry")
+    adopt_command.add_argument("--agent", required=True, choices=AGENTS, help="the agent whose local skill is copied")
+    adopt_command.add_argument("--skill", required=True, help="skill folder name")
+    adopt_command.add_argument("--to", required=True, choices=OWNERS, dest="owner", help="repository owner folder")
+    adopt_command.add_argument(
+        "--replace-repo", action="store_true", help="overwrite an existing repository copy with the local one"
+    )
     restore = commands.add_parser("restore", help="put a backup back; without an id, list the backups")
     restore.add_argument("backup_id", nargs="?")
     commands.add_parser("uninstall", help="remove the links this tool created; backups are not restored")
@@ -54,6 +62,8 @@ def main(
         return _restore(args.backup_id, repo_root, env, out)
     if args.command == "uninstall":
         return _uninstall(repo_root, env, out)
+    if args.command == "adopt":
+        return _adopt(args, repo_root, env, out)
 
     try:
         manifest = load_manifest(repo_root / "manifest.json")
@@ -88,6 +98,20 @@ def _install(manifest: Manifest, repo_root: Path, env: Environment, out: TextIO,
     for backup in backups:
         print(f"backup         {env.shorten(backup.target)}: {backup.id}", file=out)
     print(f"Applied {len(plan.changes)} change(s).", file=out)
+    return 0
+
+
+def _adopt(args: argparse.Namespace, repo_root: Path, env: Environment, out: TextIO) -> int:
+    try:
+        result = adopt(repo_root, env, args.agent, args.skill, args.owner, args.replace_repo)
+    except (AdoptError, TargetChangedError, OSError) as error:
+        print(f"error    {error}", file=out)
+        return 1
+    action = "replaced" if result.replaced_repo_copy else "copied"
+    print(f"{action:<14} {env.shorten(result.local)} -> {result.source}", file=out)
+    if result.entry_added:
+        print(f"manifest       added entry {result.entry_id}", file=out)
+    print("Nothing was installed or committed. Next: review with git diff, then ai-config install --dry-run.", file=out)
     return 0
 
 

@@ -23,6 +23,28 @@ def write_private_file(path: Path, text: str) -> None:
     os.replace(temporary, path)
 
 
+def write_text_file(path: Path, text: str, unchanged: Callable[[], bool] = lambda: True) -> None:
+    """Replace a repository file atomically, keeping its current mode (0644 for a new file).
+
+    `unchanged` runs right before the replacement; if it returns False, TargetChangedError is raised
+    and the file is left as it is. The temporary file never outlives a failure.
+    """
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
+    temporary = temporary_sibling(path)
+    descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, mode)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.chmod(temporary, mode)
+        if not unchanged():
+            raise TargetChangedError(f"{path} changed while it was being written")
+        os.replace(temporary, path)
+    except BaseException:
+        if os.path.lexists(temporary):
+            os.unlink(temporary)
+        raise
+
+
 def place_symlink(target: Path, link_text: str, unchanged: Callable[[], bool]) -> None:
     """Point `target` at `link_text` by renaming a temporary link into place.
 

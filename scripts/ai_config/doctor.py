@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import os
-import re
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from .content import scan_tree
 from .manifest import OWNERS, Manifest, ManifestError, load_manifest, skill_targets
 from .paths import Environment
 from .planner import CHANGES, CONFLICT, ORPHAN, build_plan, points_into
@@ -18,26 +18,6 @@ INFO = "info"
 LEVELS = (ERROR, WARNING, INFO)
 
 _SKIPPED_REPO_DIRS = {".git", "__pycache__"}
-_FORBIDDEN_NAMES = {
-    ".env",
-    ".claude.json",
-    ".credentials.json",
-    "auth.json",
-    "credentials.json",
-    "default.rules",
-    "history.jsonl",
-}
-_FORBIDDEN_SUFFIXES = (".db", ".log", ".sqlite", ".sqlite3")
-_SECRET_PATTERNS = (
-    ("private key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
-    ("AWS access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    ("GitHub token", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})")),
-    ("API key", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}")),
-    ("Slack token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}")),
-    ("Google API key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}")),
-)
-_HOME_PATH = re.compile(r"(?<![\w.~-])/(?:Users|home)/[A-Za-z0-9._-]+")
-_MAX_SCANNED_BYTES = 1_000_000
 
 
 @dataclass(frozen=True)
@@ -184,47 +164,17 @@ def _check_install_plan(repo_root: Path, env: Environment, manifest: Manifest, s
 
 
 def _check_repo_content(repo_root: Path) -> list[Finding]:
-    findings = []
-    for current, dirs, files in os.walk(repo_root):
-        dirs[:] = sorted(name for name in dirs if name not in _SKIPPED_REPO_DIRS)
-        for name in sorted(files):
-            path = Path(current) / name
-            relative = path.relative_to(repo_root).as_posix()
-            if _is_forbidden(name):
-                findings.append(Finding(ERROR, f"{relative}: forbidden file in the repository"))
-                continue
-            text = _read_text(path)
-            if text is not None:
-                findings += _scan_text(relative, text, check_home_paths=relative.split("/")[0] in OWNERS)
-    return findings
-
-
-def _scan_text(relative: str, text: str, check_home_paths: bool) -> list[Finding]:
-    findings = []
-    for number, line in enumerate(text.splitlines(), start=1):
-        for label, pattern in _SECRET_PATTERNS:
-            if pattern.search(line):
-                findings.append(Finding(ERROR, f"{relative}:{number}: possible {label}"))
-        if check_home_paths:
-            match = _HOME_PATH.search(line)
-            if match:
-                findings.append(Finding(ERROR, f"{relative}:{number}: absolute home path {match.group(0)}"))
-    return findings
-
-
-def _is_forbidden(name: str) -> bool:
-    if name.startswith(".env.") and name != ".env.example":
-        return True
-    return name in _FORBIDDEN_NAMES or name.endswith(_FORBIDDEN_SUFFIXES)
-
-
-def _read_text(path: Path) -> str | None:
-    if path.is_symlink() or path.stat().st_size > _MAX_SCANNED_BYTES:
-        return None
-    data = path.read_bytes()
-    if b"\0" in data:
-        return None
-    return data.decode("utf-8", errors="replace")
+    problems = scan_tree(
+        repo_root,
+        check_home_paths=lambda relative: relative.split("/")[0] in OWNERS,
+        skipped_dirs=frozenset(_SKIPPED_REPO_DIRS),
+    )
+    return [
+        Finding(ERROR, f"{problem.relative}: forbidden file in the repository")
+        if problem.line is None
+        else Finding(ERROR, str(problem))
+        for problem in problems
+    ]
 
 
 def _skill_source(source: str) -> tuple[str, str] | None:
