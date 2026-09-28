@@ -35,8 +35,7 @@ repository and make it yours:
 | Skill | Agent | What it does |
 |---|---|---|
 | `commit-me` | both | Commits only when asked, with a message in the repository's own style. |
-| `plan` | Claude | Writes a phased implementation plan once a discussion has settled. |
-| `task-plan` | Codex | The Codex counterpart of `plan`. |
+| `planning` | both | Writes a phased implementation plan once a discussion has settled. |
 | `codex-review` | Claude | Asks Codex for an independent review, then checks each finding. |
 | `claude-review` | Codex | Asks Claude for an independent review, then checks each finding. |
 | `backlog` | both | Files out-of-scope findings into a repo-local backlog and checks them later. |
@@ -158,7 +157,7 @@ scripts/ai-config install --dry-run
 `install` would do. `install --dry-run` prints the plan:
 
 ```text
-create         ~/.claude/skills/plan -> claude/skills/plan
+create         ~/.claude/skills/planning -> shared/skills/planning
 create         ~/.codex/AGENTS.md
 conflict       ~/.claude/CLAUDE.md: local content differs from the repository (see: ai-config diff instructions/claude)
 ```
@@ -197,7 +196,7 @@ Then choose one side:
   install:
 
   ```sh
-  scripts/ai-config adopt --agent claude --skill plan --to claude --replace-repo
+  scripts/ai-config adopt --agent claude --skill planning --to shared --replace-repo
   ```
 
   `adopt` works only on real skill folders. For an instruction file, copy the lines you want to keep
@@ -232,6 +231,19 @@ scripts/ai-config install
 
 `doctor` reports when the generated `~/.codex/AGENTS.md` is older than its sources. `install` links new
 skills and regenerates the file.
+
+When a pull removed or renamed a skill or an instruction entry, `doctor` reports the old target as an
+orphan. Check the plan, then remove the old targets:
+
+```sh
+scripts/ai-config install --dry-run --prune
+scripts/ai-config install --prune
+```
+
+`--prune` removes, with a backup, only what the tool created: links into this repository, and a
+generated instruction file that is still unedited. An old plain copy of a skill, left from before this
+repository managed it, stays in place; `doctor` lists it as unmanaged. Back it up, then remove it
+yourself.
 
 ## Add a skill
 

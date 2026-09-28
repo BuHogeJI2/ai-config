@@ -1,4 +1,0 @@
-interface:
-  display_name: "Task Plan"
-  short_description: "Create executable plans for codebase changes"
-  default_prompt: "Use $task-plan to create an implementation plan for this codebase change."

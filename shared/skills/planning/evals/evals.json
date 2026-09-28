@@ -1,11 +1,11 @@
 {
-  "skill_name": "plan",
+  "skill_name": "planning",
   "evals": [
     {
       "id": 0,
       "name": "cold-vague-request",
       "prompt": "write me a plan for adding caching to my api, its getting slow",
-      "expected_output": "Does NOT produce a plan. Identifies that key decisions are unresolved (which layer to cache, cache store, TTL/invalidation strategy, which endpoints, correctness constraints on the money path) and returns to discussion with concrete questions, ideally with recommendations attached.",
+      "expected_output": "Does NOT produce a plan. Inspects the repository first, then identifies the key decisions that remain unresolved (which layer to cache, cache store, TTL/invalidation strategy, which endpoints, correctness constraints on the money path) and returns to discussion with concrete questions, ideally with recommendations attached.",
       "files": [
         "fixture repo"
       ]
@@ -24,6 +24,33 @@
       "name": "trivial-mechanical-rename",
       "prompt": "can you plan out renaming getUserData -> fetchUserProfile everywhere? the name's misleading now that it returns the profile object and not the raw row",
       "expected_output": "Recognizes this is small and obviously ordered. Produces a short plan (task, approach, verification) rather than manufacturing five ceremonial phases with a dependency table.",
+      "files": [
+        "fixture repo"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "plan-mode-artifact",
+      "prompt": "(in the agent's plan mode) we agreed to move the CSV export from the orders page into a background job. decided: same columns; the existing job runner with its default retry of 3, a failed job emails the user that the export failed; the file goes to the existing private exports bucket and the email carries a signed link that expires after 24 hours, same as invoices today; ship it behind the existing async_exports flag, off by default, and remove the old synchronous path once the flag has been on for a week. give me the plan",
+      "expected_output": "Writes the full plan as the user-facing answer in the conversation, with the standard sections, rather than treating an internal plan, task list, or plan-mode tool state as the deliverable.",
+      "files": [
+        "fixture repo"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "unresolved-external-contract",
+      "prompt": "plan the switch of our public /v1/orders endpoint from offset to cursor pagination. we talked about the implementation already, the new cursor param and the service changes are clear",
+      "expected_output": "Does NOT produce a plan. Treats the unresolved external contract as blocking (what happens to existing clients that send offset: removed, deprecated alongside, or moved to /v2; response shape of the next cursor) and asks about it with a recommendation, instead of recording a guess as an assumption.",
+      "files": [
+        "fixture repo"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "unavailable-command-gate",
+      "prompt": "plan adding request logging middleware, as discussed: structured JSON lines to stdout, request id from the existing header, no bodies logged. note the e2e suite needs a docker compose stack that this checkout has never set up",
+      "expected_output": "Produces the plan. Labels the e2e suite as a post-setup gate rather than a runnable check, and gives a verification that runs in the checkout now (for example the unit test command confirmed in the repository, or a specific manual observation).",
       "files": [
         "fixture repo"
       ]

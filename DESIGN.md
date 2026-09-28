@@ -401,7 +401,8 @@ Skill migration finished on 2026-09-28 with these results:
 - `commit-me` is one shared skill: the Claude text, the Codex frontmatter (a folded description, because the Claude one-line description was not valid YAML), and the Codex `agents/openai.yaml`.
 - `backlog` was first migrated as two agent-specific skills and then merged into one shared skill: the Claude text and script, with its Claude-only argument and question handling made neutral (see `docs/plans/merge-shared-skills.md`).
 - `peer-chat` is two agent-specific skills, one for each side of the chat. Both need `peer-chat.py` on `PATH`, a script from the agterm cookbook that is not in this repository; its entries declare it in `requires`, and README.md has the pinned install recipe.
-- Codex `claude-review` and `task-plan` are counterparts to Claude `codex-review` and `plan`. They stay agent-specific.
+- Codex `claude-review` is the counterpart of Claude `codex-review`. They stay agent-specific.
+- Claude `plan` and Codex `task-plan` were first migrated as agent-specific skills and then merged into one shared skill, `planning` (see `docs/plans/merge-shared-skills.md`).
 - `styles-handling` was obsolete and was deleted, not migrated.
 - `~/.claude/skills/synced/` is cloud-synchronized and never managed.
 

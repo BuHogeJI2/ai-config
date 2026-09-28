@@ -1,15 +1,18 @@
 ---
-name: plan
-description: Produce a phased, independently committable implementation or refactoring plan for a codebase change, grounded in the discussion that preceded it. Use this whenever the user asks for a plan, roadmap, or phased approach to changing code — including phrasings like "write up a plan", "how should we approach this refactor", "break this into steps/phases", "plan out the migration", "what's the order of work here" — and also when a design discussion has converged and the natural next artifact is a written plan, even if the user never says the word "plan". Use it as well when revising or extending a plan that already exists. The skill enforces a readiness gate: if any real ambiguity remains, it returns to discussion and asks before writing anything.
+name: planning
+description: >-
+  Produce a phased, independently committable implementation or refactoring plan for a codebase change, grounded in the discussion that preceded it and in repository evidence. Use this whenever the user asks for a plan, roadmap, migration sequence, ordered steps, or phased approach to changing code — including phrasings like "write up a plan", "how should we approach this refactor", "break this into steps/phases", "plan out the migration", "what's the order of work here" — and also when a design discussion has converged and the natural next artifact is a written plan, even if the user never says the word "plan". Use it as well when revising or extending a plan that already exists, in plan mode or any other mode. The skill enforces a readiness gate: if any real ambiguity remains, it returns to discussion and asks before writing anything.
 ---
 
-# Plan
+# Planning
 
 ## What this is for
 
 A plan is a handoff artifact. The reader might be the user next week, a teammate who wasn't in this conversation, or a fresh session with no memory of it. They should be able to execute it without asking you anything.
 
 That bar is what every rule below serves. When a rule seems inconvenient, check it against that bar and use judgment.
+
+Apply the same workflow in every interaction mode, including an agent's plan mode. An internal plan, a task list, or a planning tool's state is not a substitute for the plan artifact the user reads.
 
 ## Scale the ceremony to the change
 
@@ -23,7 +26,7 @@ The plan has to reflect what was actually discussed and decided. Before writing 
 
 **First, read the code.** A lot of apparent ambiguity dissolves on contact with the repository — existing conventions, patterns, and constraints answer questions you'd otherwise put to the user. Reading is cheaper than asking and it respects their time. Only what survives this pass is a real question.
 
-**Then build a decision ledger.** List every decision the plan depends on, and classify each:
+**Then build a private decision ledger.** List every decision the plan depends on, and classify each:
 
 - **Decided** — settled in the discussion. Note where, so you can cite it in the plan's rationale.
 - **Assumed** — never discussed, but the codebase's own conventions leave one reasonable answer (new tests go beside existing ones; the new module follows the existing directory layout). Record these in the plan so they're visible and correctable.
@@ -31,11 +34,13 @@ The plan has to reflect what was actually discussed and decided. Before writing 
 
 **The test for Assumed vs. Blocking:** imagine the user reading the finished plan. Would this choice surprise them? Would a competent engineer with the same context have picked differently? If yes, it's blocking.
 
+Some choices are blocking unless the discussion or a clear repository convention settles them: externally observable contracts, security boundaries, migration or cutover strategy, persistence semantics, and concurrency models. Don't downgrade one of these to an assumption just because an answer is easy to invent — these are the choices that are most expensive to get wrong.
+
 **Any blocking item stops the plan.** Don't write around a hole, and don't fill it with a plausible-sounding choice. An unclear plan announces itself and gets fixed; a confident plan resting on a guess gets executed, and the guess only surfaces once the code is written. That asymmetry is why the gate is strict here.
 
 So when there are blocking items: don't write the plan. Go back to discussion. Ask the questions directly, explain what each one changes about the plan, and offer your recommendation where you have one — you're resolving ambiguity, not administering a quiz. Then plan.
 
-Two failure modes to avoid on either side. Don't manufacture doubt about things the discussion clearly settled or the codebase clearly answers; interrogating the user about decisions they already made is its own way of not listening. And if the skill is invoked cold, with little or no prior discussion, nearly everything is blocking — don't paper over that with assumptions. Interview first, plan second.
+Two failure modes to avoid on either side. Don't manufacture doubt about things the discussion clearly settled or the codebase clearly answers; interrogating the user about decisions they already made is its own way of not listening. And if the skill is invoked cold, with little or no prior discussion, inspect the repository first, then ask about the blockers that survive — don't fill the gaps with plausible guesses.
 
 ## Step 2 — Where the plan goes
 
@@ -89,13 +94,15 @@ stated plainly so the user can correct them at a glance.
 
 Drop sections that would be empty — an "Assumptions" heading over nothing is noise. Keep the order.
 
+Name concrete files, modules, symbols, interfaces, data flows, and tests where the repository supports them. An invented path or a vague direction such as "update the backend" leaves the reader to redo the investigation you already did.
+
 ### What makes a phase atomic
 
 Each phase should leave the repository in a state you'd be willing to commit and ship: it builds, tests pass, nothing is half-wired. That's the property that makes phases independently committable *and* independently revertable, which is the real prize — a phase that can't be backed out alone isn't a phase, it's a fragment.
 
-Techniques that buy this independence:
+Techniques that can buy this independence, when they fit the change:
 
-- **Add before remove.** Introduce the new path alongside the old, migrate callers, delete the old — three phases, each shippable, instead of one big-bang swap.
+- **Add before remove.** Introduce the new path alongside the old, migrate callers, delete the old — each step shippable, instead of one big-bang swap.
 - **Land dormant code first.** New code that's tested but not yet called is a safe, reviewable commit.
 - **Feature flags** when a behavior change has to go in before everything downstream is ready.
 - **Separate mechanical from semantic.** A rename touching 200 files belongs in its own phase; mixed with logic changes, the diff becomes unreviewable and the logic change hides in the noise.
@@ -108,7 +115,7 @@ A verification step is only worth writing if it actually runs. Before citing one
 
 Naming `npm run build` in a project with no `tsconfig.json`, or a test command whose dependencies were never installed, hands the reader a check that fails no matter what they did. The cost isn't the wasted minute — it's that the verification line stops being trusted, and after that the phase boundaries aren't really guarded by anything.
 
-Where nothing reliable exists, say so and give the best available substitute — a grep that should come back empty, a specific observation to make by hand — rather than a plausible-looking command you haven't confirmed.
+Where nothing reliable exists, say so and give the best available substitute — a grep that should come back empty, a specific observation to make by hand — rather than a plausible-looking command you haven't confirmed. When a valid project command can't run in this checkout because setup is missing, label it as a post-setup gate rather than a check that runs now, and give one that does run now.
 
 ### Dependencies
 

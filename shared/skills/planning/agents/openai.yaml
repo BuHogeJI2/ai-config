@@ -1,0 +1,4 @@
+interface:
+  display_name: "Planning"
+  short_description: "Create executable plans for codebase changes"
+  default_prompt: "Use $planning to create an implementation plan for this codebase change."

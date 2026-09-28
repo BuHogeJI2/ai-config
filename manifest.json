@@ -5,19 +5,12 @@
   ],
   "entries": [
     {
-      "id": "skill/task-plan",
+      "id": "skill/planning",
       "method": "symlink",
-      "source": "codex/skills/task-plan",
+      "source": "shared/skills/planning",
       "targets": [
-        "~/.agents/skills/task-plan"
-      ]
-    },
-    {
-      "id": "skill/plan",
-      "method": "symlink",
-      "source": "claude/skills/plan",
-      "targets": [
-        "~/.claude/skills/plan"
+        "~/.agents/skills/planning",
+        "~/.claude/skills/planning"
       ]
     },
     {
