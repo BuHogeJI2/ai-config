@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -33,16 +33,32 @@ class Environment:
         return self.codex_home / "skills"
 
     @property
+    def codex_legacy_skills_are_separate(self) -> bool:
+        return self.codex_legacy_skills.resolve() != self.codex_skills.resolve()
+
+    @property
     def claude_skills(self) -> Path:
         return self.claude_home / "skills"
 
     def expand(self, target: str) -> Path:
-        if not target.startswith("~/"):
-            raise ValueError(f"target must start with '~/': {target}")
-        return self.home / target[2:]
+        rest = PurePosixPath(target[2:])
+        if not target.startswith("~/") or not rest.parts or rest.is_absolute() or ".." in rest.parts:
+            raise ValueError(f"target must be a path below '~/': {target}")
+        if rest.parts[0] == ".codex":
+            return self.codex_home.joinpath(*rest.parts[1:])
+        return self.home.joinpath(*rest.parts)
 
     def shorten(self, path: Path) -> str:
-        try:
-            return "~/" + str(path.relative_to(self.home))
-        except ValueError:
-            return str(path)
+        if _is_below(path, self.home):
+            return "~/" + path.relative_to(self.home).as_posix()
+        if _is_below(path, self.codex_home):
+            return "$CODEX_HOME/" + path.relative_to(self.codex_home).as_posix()
+        return str(path)
+
+
+def _is_below(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True

@@ -40,3 +40,16 @@ class FakeWorldTestCase(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
         return path
+
+
+def skill_entry(owner, name, targets=None):
+    return {
+        "id": f"skill/{name}",
+        "method": "symlink",
+        "source": f"{owner}/skills/{name}",
+        "targets": targets or {
+            "shared": [f"~/.agents/skills/{name}", f"~/.claude/skills/{name}"],
+            "codex": [f"~/.agents/skills/{name}"],
+            "claude": [f"~/.claude/skills/{name}"],
+        }[owner],
+    }

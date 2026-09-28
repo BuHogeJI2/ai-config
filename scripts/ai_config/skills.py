@@ -49,7 +49,8 @@ def read_frontmatter(skill_md: Path) -> dict[str, str] | None:
 def discover(env: Environment) -> list[LocalSkill]:
     skills: list[LocalSkill] = []
     skills += _children("codex", "personal", env.codex_skills)
-    skills += _children("codex", "legacy", env.codex_legacy_skills)
+    if env.codex_legacy_skills_are_separate:
+        skills += _children("codex", "legacy", env.codex_legacy_skills)
     skills += _children("codex", "system", env.codex_legacy_skills / ".system")
     skills += _plugin_skills("codex", env.codex_home / "plugins" / "cache")
     skills += _children("claude", "personal", env.claude_skills)

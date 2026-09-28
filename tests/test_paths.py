@@ -24,7 +24,14 @@ class EnvironmentTest(unittest.TestCase):
         self.assertEqual(env.shorten(Path("/h/.claude/skills/x")), "~/.claude/skills/x")
         self.assertEqual(env.shorten(Path("/elsewhere")), "/elsewhere")
 
-    def test_expand_rejects_other_paths(self):
+    def test_expand_rejects_paths_outside_home(self):
         env = Environment.from_env({"HOME": "/h"})
-        with self.assertRaises(ValueError):
-            env.expand("/h/.claude")
+        for target in ("/h/.claude", "~//tmp/x", "~/", "~/.", "~/a/../../etc"):
+            with self.subTest(target=target), self.assertRaises(ValueError):
+                env.expand(target)
+
+    def test_codex_targets_follow_codex_home(self):
+        env = Environment.from_env({"HOME": "/h", "CODEX_HOME": "/c"})
+        self.assertEqual(env.expand("~/.codex/AGENTS.md"), Path("/c/AGENTS.md"))
+        self.assertEqual(env.expand("~/.agents/skills/x"), Path("/h/.agents/skills/x"))
+        self.assertEqual(env.shorten(Path("/c/skills/x")), "$CODEX_HOME/skills/x")

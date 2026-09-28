@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -10,6 +11,14 @@ OWNERS = ("shared", "codex", "claude")
 
 _ENTRY_KEYS = {"id", "method", "source", "sources", "targets", "requires"}
 _REQUIRES_KEYS = {"commands", "mcp"}
+_NAME = r"[A-Za-z0-9_][A-Za-z0-9._-]*"
+_TARGET = re.compile(
+    rf"~/\.agents/skills/{_NAME}"
+    rf"|~/\.claude/skills/{_NAME}"
+    r"|~/\.claude/CLAUDE\.md"
+    rf"|~/\.claude/rules/{_NAME}\.md"
+    r"|~/\.codex/AGENTS\.md"
+)
 
 
 class ManifestError(Exception):
@@ -37,6 +46,10 @@ class Manifest:
 
     def is_external(self, name: str) -> bool:
         return name.lower() in {external.lower() for external in self.external}
+
+
+def is_manageable_name(name: str) -> bool:
+    return re.fullmatch(_NAME, name) is not None
 
 
 def skill_targets(owner: str, name: str) -> tuple[str, ...]:
@@ -82,6 +95,7 @@ def parse_manifest(data: Any) -> Manifest:
         if entry:
             entries.append(entry)
 
+    _check_protected_targets(entries, external, problems)
     _check_unique([entry.id for entry in entries], "entry id", problems)
     _check_unique([target for entry in entries for target in entry.targets], "target", problems)
 
@@ -148,8 +162,8 @@ def _parse_targets(raw: dict, where: str, problems: list[str]) -> tuple[str, ...
         problems.append(f"{where}: 'targets' must be a non-empty list of strings")
         return ()
     for target in targets:
-        if not target.startswith("~/") or ".." in PurePosixPath(target).parts:
-            problems.append(f"{where}: target must start with '~/' and must not contain '..': {target}")
+        if not _TARGET.fullmatch(target):
+            problems.append(f"{where}: unsupported target {target}; allowed: a skill folder, CLAUDE.md, a Claude rules file, or AGENTS.md")
     return tuple(targets)
 
 
@@ -169,13 +183,26 @@ def _parse_requires(requires: Any, where: str, problems: list[str]) -> dict[str,
     return parsed
 
 
+def _check_protected_targets(entries: list[Entry], external: list[str], problems: list[str]) -> None:
+    external_names = {name.lower() for name in external}
+    for entry in entries:
+        for target in entry.targets:
+            folder, _, name = target.rpartition("/")
+            if folder not in ("~/.agents/skills", "~/.claude/skills"):
+                continue
+            if target.lower() == "~/.claude/skills/synced":
+                problems.append(f"entry '{entry.id}': {target} is reserved for cloud-synced skills")
+            elif name.lower() in external_names:
+                problems.append(f"entry '{entry.id}': {target} is an external skill and is app-managed")
+
+
 def _is_string_list(value: Any) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
 def _is_repo_relative(path: str) -> bool:
     pure = PurePosixPath(path)
-    return bool(path) and not pure.is_absolute() and ".." not in pure.parts
+    return str(pure) == path and path != "." and not pure.is_absolute() and ".." not in pure.parts
 
 
 def _check_unique(values: list[str], label: str, problems: list[str]) -> None:

@@ -66,16 +66,51 @@ class ParseManifestTest(unittest.TestCase):
     def test_source_and_sources_together(self):
         self.assertProblem(manifest(skill_entry(sources=["a"])), "either 'source' or 'sources'")
 
-    def test_source_must_stay_inside_repository(self):
-        self.assertProblem(manifest(skill_entry(source="../outside")), "relative path inside the repository")
-        self.assertProblem(manifest(skill_entry(source="/abs")), "relative path inside the repository")
+    def test_source_must_be_a_normalized_path_inside_repository(self):
+        for source in ("../outside", "/abs", ".", "claude/./skills/plan", "claude//skills/plan", "claude/skills/plan/"):
+            with self.subTest(source=source):
+                self.assertProblem(manifest(skill_entry(source=source)), "relative path inside the repository")
 
-    def test_targets_must_start_with_home(self):
-        self.assertProblem(manifest(skill_entry(targets=["/Users/x/.claude/skills/plan"])), "must start with '~/'")
-        self.assertProblem(manifest(skill_entry(targets=["~/../x"])), "must not contain '..'")
+    def test_only_supported_target_shapes(self):
+        for target in (
+            "~/.agents/skills/plan",
+            "~/.claude/skills/plan",
+            "~/.claude/CLAUDE.md",
+            "~/.claude/rules/shared.md",
+            "~/.codex/AGENTS.md",
+        ):
+            with self.subTest(target=target):
+                parse_manifest(manifest(skill_entry(targets=[target])))
+        for target in (
+            "/Users/x/.claude/skills/plan",
+            "~//tmp/x",
+            "~/.claude/skills/../settings.json",
+            "~/.claude/skills/.hidden",
+            "~/.claude/skills/a/b",
+            "~/.claude/settings.json",
+            "~/.claude",
+            "~/.codex/config.toml",
+            "~/.codex/rules/default.rules",
+            "~/.claude/rules/notes.txt",
+            "~/.claudeXskills/plan",
+        ):
+            with self.subTest(target=target):
+                self.assertProblem(manifest(skill_entry(targets=[target])), "unsupported target")
+
+    def test_synced_and_external_skill_targets_are_protected(self):
+        self.assertProblem(
+            manifest(skill_entry(targets=["~/.claude/skills/Synced"])), "is reserved for cloud-synced skills"
+        )
+        self.assertProblem(
+            manifest(skill_entry(targets=["~/.agents/skills/AGTERM"]), external=["agterm"]),
+            "is an external skill and is app-managed",
+        )
+        parse_manifest(manifest(skill_entry(targets=["~/.claude/rules/agterm.md"]), external=["agterm"]))
 
     def test_duplicate_ids_and_targets_ignore_case(self):
-        self.assertProblem(manifest(skill_entry(), skill_entry(id="SKILL/PLAN", targets=["~/b"])), "duplicate entry id")
+        self.assertProblem(
+            manifest(skill_entry(), skill_entry(id="SKILL/PLAN", targets=["~/.claude/skills/other"])), "duplicate entry id"
+        )
         self.assertProblem(
             manifest(skill_entry(), skill_entry(id="other", targets=["~/.claude/skills/PLAN"])), "duplicate target"
         )

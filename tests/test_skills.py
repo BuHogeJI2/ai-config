@@ -56,6 +56,11 @@ class DiscoverTest(FakeWorldTestCase):
         self.add_skill(self.home / ".codex/plugins/cache/tool/node_modules/dep/skills", "dependency")
         self.assertEqual(self.found(), set())
 
+    def test_legacy_folder_that_is_the_install_folder_is_scanned_once(self):
+        self.add_skill(self.env.codex_skills, "plan")
+        self.link(self.env.codex_legacy_skills, self.env.codex_skills)
+        self.assertEqual(self.found(), {("codex", "personal", "~/.agents/skills/plan")})
+
     def test_follows_skill_links(self):
         source = self.add_skill(self.repo / "shared/skills", "linked")
         self.link(self.env.claude_skills / "linked", source)

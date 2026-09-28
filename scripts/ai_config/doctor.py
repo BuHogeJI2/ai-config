@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 
 from .manifest import OWNERS, Manifest, ManifestError, load_manifest, skill_targets
 from .paths import Environment
+from .planner import CHANGES, CONFLICT, ORPHAN, build_plan, points_into
 from .skills import LocalSkill, discover, read_frontmatter
 
 ERROR = "error"
@@ -57,6 +58,7 @@ def run_doctor(repo_root: Path, env: Environment) -> list[Finding]:
     findings += _check_repo_skills(repo_root, manifest)
     findings += _check_duplicates(local_skills, env)
     findings += _check_local_skills(local_skills, manifest, repo_root, env)
+    findings += _check_install_plan(repo_root, env, manifest)
     findings += _check_repo_content(repo_root)
     return findings
 
@@ -133,20 +135,32 @@ def _check_duplicates(skills: list[LocalSkill], env: Environment) -> list[Findin
 def _check_local_skills(
     skills: list[LocalSkill], manifest: Manifest, repo_root: Path, env: Environment
 ) -> list[Finding]:
-    targets = {target for entry in manifest.entries for target in entry.targets}
     findings = []
     for skill in skills:
         if skill.kind not in ("personal", "legacy"):
             continue
         shown = env.shorten(skill.path)
-        links_into_repo = _links_into(skill.path, repo_root)
+        links_into_repo = points_into(skill.path, repo_root)
         if manifest.is_external(skill.name):
             if links_into_repo:
                 findings.append(Finding(WARNING, f"external {skill.agent} skill links into this repository: {shown}"))
             else:
                 findings.append(Finding(INFO, f"external {skill.agent} skill: {shown}"))
-        elif not (links_into_repo and shown in targets):
+        elif not links_into_repo:
             findings.append(Finding(INFO, f"unmanaged {skill.agent} skill: {shown}"))
+    return findings
+
+
+def _check_install_plan(repo_root: Path, env: Environment, manifest: Manifest) -> list[Finding]:
+    findings = []
+    for action in build_plan(repo_root, env, manifest).actions:
+        shown = env.shorten(action.target)
+        if action.kind == CONFLICT:
+            findings.append(Finding(ERROR, f"install conflict at {shown}: {action.detail}"))
+        elif action.kind == ORPHAN:
+            findings.append(Finding(WARNING, f"orphan link {shown}: {action.detail}"))
+        elif action.kind in CHANGES:
+            findings.append(Finding(INFO, f"install pending ({action.kind}) at {shown}"))
     return findings
 
 
@@ -199,16 +213,6 @@ def _skill_source(source: str) -> tuple[str, str] | None:
     if len(parts) == 3 and parts[0] in OWNERS and parts[1] == "skills":
         return parts[0], parts[2]
     return None
-
-
-def _links_into(path: Path, repo_root: Path) -> bool:
-    if not path.is_symlink():
-        return False
-    try:
-        path.resolve().relative_to(repo_root.resolve())
-    except ValueError:
-        return False
-    return True
 
 
 def _group_by_name(skills) -> dict[str, list[LocalSkill]]:

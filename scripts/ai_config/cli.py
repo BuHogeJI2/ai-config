@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Mapping, Sequence, TextIO
 
 from .doctor import ERROR, LEVELS, WARNING, run_doctor
+from .manifest import Entry, Manifest, ManifestError, load_manifest
 from .paths import REPO_ROOT, Environment
+from .planner import CONFLICT, CREATE, RELINK, Plan, build_plan, link_destination
+from .trees import TreeError, describe_differences
 
 
 def main(
@@ -19,13 +22,27 @@ def main(
     parser = argparse.ArgumentParser(prog="ai-config")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor", help="report problems without changing anything")
+    install = commands.add_parser("install", help="link and generate managed files")
+    install.add_argument("--dry-run", action="store_true", required=True, help="print the plan without changing anything")
+    diff = commands.add_parser("diff", help="show how a local target differs from the repository")
+    diff.add_argument("id", help="manifest entry id")
     args = parser.parse_args(argv)
 
     env = Environment.from_env(os.environ if environ is None else environ)
+    repo_root = (repo_root or REPO_ROOT).resolve()
     out = out or sys.stdout
     if args.command == "doctor":
-        return _doctor(repo_root or REPO_ROOT, env, out)
-    return 2
+        return _doctor(repo_root, env, out)
+
+    try:
+        manifest = load_manifest(repo_root / "manifest.json")
+    except ManifestError as error:
+        for problem in error.problems:
+            print(f"error    manifest: {problem}", file=out)
+        return 1
+    if args.command == "install":
+        return _print_plan(build_plan(repo_root, env, manifest), repo_root, env, out)
+    return _diff(args.id, manifest, repo_root, env, out)
 
 
 def _doctor(repo_root: Path, env: Environment, out: TextIO) -> int:
@@ -36,3 +53,62 @@ def _doctor(repo_root: Path, env: Environment, out: TextIO) -> int:
     warnings = sum(finding.level == WARNING for finding in findings)
     print(f"{errors} error(s), {warnings} warning(s)", file=out)
     return 1 if errors else 0
+
+
+def _print_plan(plan: Plan, repo_root: Path, env: Environment, out: TextIO) -> int:
+    for action in plan.actions:
+        line = f"{action.kind:<14} {env.shorten(action.target)}"
+        if action.kind in (CREATE, RELINK) and action.source:
+            line += f" -> {action.source.relative_to(repo_root)}"
+        if action.detail:
+            line += f": {action.detail}"
+        if action.kind == CONFLICT and action.entry_id:
+            line += f" (see: ai-config diff {action.entry_id})"
+        print(line, file=out)
+
+    if plan.conflicts:
+        print(f"{len(plan.conflicts)} conflict(s): install changes nothing until they are resolved.", file=out)
+        return 1
+    if plan.orphans:
+        print(f"{len(plan.orphans)} orphan link(s): removed only with --prune.", file=out)
+    print(f"{len(plan.changes)} change(s) planned." if plan.changes else "Nothing to change.", file=out)
+    return 0
+
+
+def _diff(entry_id: str, manifest: Manifest, repo_root: Path, env: Environment, out: TextIO) -> int:
+    entry = next((entry for entry in manifest.entries if entry.id == entry_id), None)
+    if entry is None:
+        print(f"error    no manifest entry '{entry_id}'", file=out)
+        return 1
+    if entry.method != "symlink":
+        print(f"error    diff does not support the {entry.method} method yet", file=out)
+        return 1
+
+    source = repo_root / entry.sources[0]
+    source_label = entry.sources[0]
+    for target in _diff_targets(entry, env):
+        shown = env.shorten(target)
+        if target.is_symlink() and link_destination(target) == source:
+            print(f"{shown}: linked to {source_label}", file=out)
+        elif target.is_symlink():
+            print(f"{shown}: link to {link_destination(target)}", file=out)
+        elif not target.exists():
+            print(f"{shown}: missing", file=out)
+        else:
+            try:
+                lines = describe_differences(target, source, shown, source_label)
+            except TreeError as error:
+                print(f"{shown}: cannot compare: {error}", file=out)
+                continue
+            print(f"{shown}: identical to {source_label}" if not lines else f"{shown}: differs from {source_label}", file=out)
+            for line in lines:
+                print(line, file=out)
+    return 0
+
+
+def _diff_targets(entry: Entry, env: Environment) -> list[Path]:
+    targets = [env.expand(target) for target in entry.targets]
+    if not env.codex_legacy_skills_are_separate:
+        return targets
+    legacy = [env.codex_legacy_skills / target.name for target in targets if target.parent == env.codex_skills]
+    return targets + [path for path in legacy if path.exists() or path.is_symlink()]

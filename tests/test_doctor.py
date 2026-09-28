@@ -1,20 +1,7 @@
 from ai_config.doctor import ERROR, INFO, WARNING, run_doctor
-from tests.helpers import FakeWorldTestCase
+from tests.helpers import FakeWorldTestCase, skill_entry
 
 FAKE_API_KEY = "sk-" + "a1B2" * 8
-
-
-def skill_entry(owner, name, targets=None):
-    return {
-        "id": f"skill/{name}",
-        "method": "symlink",
-        "source": f"{owner}/skills/{name}",
-        "targets": targets or {
-            "shared": [f"~/.agents/skills/{name}", f"~/.claude/skills/{name}"],
-            "codex": [f"~/.agents/skills/{name}"],
-            "claude": [f"~/.claude/skills/{name}"],
-        }[owner],
-    }
 
 
 class DoctorTestCase(FakeWorldTestCase):
@@ -72,7 +59,7 @@ class RepositorySkillChecksTest(DoctorTestCase):
 
     def test_external_skill_in_repository(self):
         self.add_skill(self.repo / "shared/skills", "agterm")
-        self.write_manifest([skill_entry("shared", "agterm")], external=["agterm"])
+        self.write_manifest(external=["agterm"])
         self.assertFinding(ERROR, "shared/skills/agterm: external skills must not be in the repository")
 
     def test_required_metadata(self):
@@ -132,10 +119,11 @@ class LocalSkillChecksTest(DoctorTestCase):
         self.add_skill(self.env.claude_skills / "synced/bucket", "docs")
         self.assertEqual(self.findings(), [])
 
-    def test_link_into_repository_without_entry_is_unmanaged(self):
+    def test_link_into_repository_without_entry_is_an_orphan(self):
         source = self.add_skill(self.repo / "claude/skills", "plan")
         self.link(self.env.claude_skills / "plan", source)
-        self.assertFinding(INFO, "unmanaged claude skill: ~/.claude/skills/plan")
+        self.assertFinding(WARNING, "orphan link ~/.claude/skills/plan")
+        self.assertFalse(any("unmanaged" in message for message in self.findings()))
 
     def test_external_skills(self):
         self.write_manifest(external=["agterm"])
@@ -145,6 +133,20 @@ class LocalSkillChecksTest(DoctorTestCase):
         self.assertFinding(INFO, "external codex skill: ~/.codex/skills/agterm")
         self.assertFinding(WARNING, "external claude skill links into this repository: ~/.claude/skills/agterm")
         self.assertFalse(any("unmanaged" in message for message in self.findings()))
+
+
+class InstallPlanChecksTest(DoctorTestCase):
+    def test_pending_install_is_info(self):
+        self.add_skill(self.repo / "claude/skills", "plan")
+        self.write_manifest([skill_entry("claude", "plan")])
+        self.assertFinding(INFO, "install pending (create) at ~/.claude/skills/plan")
+        self.assertEqual(self.findings(ERROR), [])
+
+    def test_conflict_is_an_error(self):
+        self.add_skill(self.repo / "claude/skills", "plan")
+        self.add_skill(self.env.claude_skills, "plan", description="Local edit.")
+        self.write_manifest([skill_entry("claude", "plan")])
+        self.assertFinding(ERROR, "install conflict at ~/.claude/skills/plan: local content differs")
 
 
 class RepositoryContentChecksTest(DoctorTestCase):
