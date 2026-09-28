@@ -4,7 +4,7 @@ Personal skills and global instructions for [Codex](https://developers.openai.co
 [Claude Code](https://code.claude.com), kept in one repository and linked into both agents on every
 machine by a small tool, `scripts/ai-config`.
 
-The repository is public. You are welcome to use any skill in it.
+The repository is public. You are welcome to use any skill in it under the [MIT license](LICENSE).
 
 ## Use a single skill
 
