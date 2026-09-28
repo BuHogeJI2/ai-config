@@ -2,4 +2,4 @@
 
 ## Projects
 
-Read `agents.md` in the project root if it exists.
+Read `AGENTS.md` in the project root if it exists.
