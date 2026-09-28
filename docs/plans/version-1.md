@@ -25,6 +25,7 @@ The migration must not be a "big bang". Each skill and each instruction section 
 - **Low-risk skills first; the ones in daily use last.** Skills without scripts go first. `codex-review`, `commit-me`, and `backlog` go last: they are used constantly, and the last two differ between agents and need a merge decision.
 - **Instructions move in two stages.** First a baseline that changes nothing: the current files move into the repository as they are, and `shared/instructions.md` is empty. Then one policy at a time moves into `shared/instructions.md`, with one commit each. Rejected: writing the shared file in one go, because a changed wording that affects agent behavior would be hard to find.
 - **Python 3.9 standard library, JSON manifest.** Decided when `DESIGN.md` was reviewed: the system Python is 3.9.6, has no TOML reader, and no packages should be installed on each device.
+- **Edits through a link reach the repository in both agents.** Checked in phase 8 on 2026-09-28: Claude's and Codex's own edit tools changed the repository file and kept the link. Codex needs the repository folder to be writable in its sandbox; the details are in `DESIGN.md` (Discovery check).
 - **Commit a migrated skill only after it passed the test in the agent.** Before the commit, rollback is `git checkout`/`git clean` of the skill folder plus `install --prune` and `restore`. After the commit, it is `git revert` plus the same two commands.
 
 ## Assumptions
@@ -274,5 +275,4 @@ If a check fails, stop and revise the design before phase 10.
 | What is `styles-handling`? | It has no description and `disable-model-invocation: true`. It may be Codex-only, shared, or obsolete. | It decides whether it is adopted, and to which owner, or deleted. | Step 10.3 |
 | Is `commit-me` merged into `shared/` or kept as two agent-specific skills? | The two versions differ; the Codex one also has `agents/openai.yaml`. | A shared skill needs one wording that works in both agents; keeping two keeps the drift. | Step 10.6 |
 | Is `backlog` merged into `shared/` or kept as two? | The versions differ, and the Claude one names `~/.claude/skills/backlog/...` for its own files. | Sharing it requires relative paths and one version of `backlog.mjs`. | Step 10.7 |
-| Does Codex write through a linked skill folder into the repository? | Checked for Claude only. Codex's patch tool may replace files instead of editing them. | If Codex replaces the link, edits through Codex are lost from the repository, and the design needs a rule for that. | Phase 8 (measured there) |
 | Is a second device available? | Not discussed. | Without it, phase 13 cannot run, and multi-device behavior stays untested. | Phase 13 |

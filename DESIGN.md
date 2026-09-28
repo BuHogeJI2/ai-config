@@ -144,6 +144,16 @@ Shared skills use only features supported by both agents. Agent-specific frontma
 
 A skill refers to its own files by paths relative to the skill folder, never by an install location such as `~/.claude/skills/<name>/...` or `~/.codex/skills/<name>/...`. Install locations differ between agents and change during migration.
 
+### Discovery check
+
+Checked on 2026-09-28 with a throwaway skill and rules file installed by the tool (Codex CLI 0.157, Claude Code), each in a fresh headless session that saved no history:
+
+- Codex loaded the linked skill from `~/.agents/skills` and ran its bundled script.
+- Claude loaded the linked skill from `~/.claude/skills`, ran its bundled script, and followed a linked rules file in `~/.claude/rules/`.
+- An edit of the skill's `SKILL.md` through the link, made with each agent's own file-editing tool, changed the repository file, and the links stayed links.
+- Codex's sandbox checks the real path behind a link, so Codex can edit a linked skill only when the repository folder is writable for it (for example `--add-dir`, or approval in an interactive session).
+- `install --prune` removed the links and `doctor` was clean afterwards.
+
 ### External skills
 
 Some skills are installed and updated by an application, not written by the user. They stay application-managed on each device and are never adopted, copied into the repository, or linked by the tool. Today this is `agterm`, which the agterm app installs through Help ▸ Install Agent Skill… or as a plugin. A repository copy would go stale on every app update, and a reinstall from the app would write through the link into the repository.
