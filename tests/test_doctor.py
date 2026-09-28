@@ -175,6 +175,39 @@ class InstallPlanChecksTest(DoctorTestCase):
         self.assertFinding(ERROR, "install conflict at ~/.claude/skills/plan: local content differs")
 
 
+class RuntimeChecksTest(DoctorTestCase):
+    def test_managed_skill_runtime_problems_are_reported(self):
+        skill = self.add_skill(self.repo / "shared/skills", "plan")
+        self.write(skill / "run.sh", "#!/bin/sh\necho ok\n").chmod(0o644)
+        entry = skill_entry("shared", "plan")
+        entry["requires"] = {"commands": ["surely-not-installed-ai-config"], "mcp": ["docs"]}
+        self.write_manifest([entry])
+        self.write(self.env.codex_home / "config.toml", "[mcp_servers.docs]\n")
+
+        self.assertFinding(ERROR, "required command 'surely-not-installed-ai-config' is not on PATH")
+        self.assertFinding(ERROR, "claude MCP server 'docs' is not configured")
+        self.assertFinding(WARNING, "shared/skills/plan/run.sh: has a shebang but is not executable")
+        self.assertFalse(any("codex MCP server" in message for message in self.findings()))
+
+    def test_doctor_writes_nothing(self):
+        skill = self.add_skill(self.repo / "claude/skills", "plan")
+        self.write(skill / "tool.py", "print('ok')\n")
+        self.write(skill / "run.sh", "#!/bin/bash\necho ok\n").chmod(0o755)
+        self.write(skill / "tool.mjs", "export const x = 1;\n")
+        self.write_manifest([skill_entry("claude", "plan")])
+
+        def everything():
+            return sorted(
+                (str(path), path.lstat().st_mode, path.read_bytes() if path.is_file() and not path.is_symlink() else None)
+                for root in (self.repo, self.home)
+                for path in root.rglob("*")
+            )
+
+        before = everything()
+        self.findings()
+        self.assertEqual(everything(), before)
+
+
 class RepositoryContentChecksTest(DoctorTestCase):
     def test_forbidden_files(self):
         for name in (".env", ".env.local", "default.rules", "auth.json", "state.sqlite", "run.log"):

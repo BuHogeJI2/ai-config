@@ -9,6 +9,7 @@ from .content import scan_tree
 from .manifest import OWNERS, Manifest, ManifestError, load_manifest, skill_targets
 from .paths import Environment
 from .planner import CHANGES, CONFLICT, ORPHAN, build_plan, points_into
+from .runtime_checks import check_commands, check_mcp, check_skill_files, claude_mcp_inventory, codex_mcp_inventory
 from .skills import LocalSkill, discover, read_frontmatter
 from .state import State, StateError, load_state
 
@@ -42,6 +43,7 @@ def run_doctor(repo_root: Path, env: Environment) -> list[Finding]:
     findings += _check_duplicates(local_skills, env)
     findings += _check_local_skills(local_skills, manifest, repo_root, env)
     findings += _check_install_plan(repo_root, env, manifest, state)
+    findings += _check_runtime(repo_root, env, manifest)
     findings += _check_repo_content(repo_root)
     return findings
 
@@ -63,6 +65,20 @@ def _check_entries(repo_root: Path, manifest: Manifest) -> list[Finding]:
                     Finding(ERROR, f"entry '{entry.id}': targets must be {', '.join(expected)} for {source}")
                 )
     return findings
+
+
+def _check_runtime(repo_root: Path, env: Environment, manifest: Manifest) -> list[Finding]:
+    problems = []
+    inventories = None
+    for entry in manifest.entries:
+        problems += check_commands(entry)
+        if entry.requires.get("mcp"):
+            inventories = inventories or {"codex": codex_mcp_inventory(env), "claude": claude_mcp_inventory(env)}
+            problems += check_mcp(entry, inventories)
+        for source in entry.sources:
+            if _skill_source(source) and (repo_root / source).is_dir():
+                problems += check_skill_files(repo_root / source, source)
+    return [Finding(problem.level, problem.message) for problem in problems]
 
 
 def _check_repo_skills(repo_root: Path, manifest: Manifest) -> list[Finding]:
