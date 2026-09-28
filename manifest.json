@@ -86,6 +86,33 @@
           "peer-chat.py"
         ]
       }
+    },
+    {
+      "id": "instructions/claude",
+      "method": "symlink",
+      "source": "claude/CLAUDE.md",
+      "targets": [
+        "~/.claude/CLAUDE.md"
+      ]
+    },
+    {
+      "id": "instructions/shared-claude",
+      "method": "symlink",
+      "source": "shared/instructions.md",
+      "targets": [
+        "~/.claude/rules/shared.md"
+      ]
+    },
+    {
+      "id": "instructions/codex",
+      "method": "compose",
+      "sources": [
+        "shared/instructions.md",
+        "codex/instructions.md"
+      ],
+      "targets": [
+        "~/.codex/AGENTS.md"
+      ]
     }
   ]
 }
