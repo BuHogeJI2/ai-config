@@ -49,34 +49,6 @@ simplify the content or talk down to me.
   technical explanations or implementation plans. Do not translate simple
   confirmations, status updates, or change summaries.
 
-## Comments in code
-
-Default to no comment. Names should explain the code.
-
-Write a comment only when:
-
-- The **why** is not visible: a business rule, a workaround, or a decision that
-  looks wrong but is correct.
-- There is a trap: required order, a library bug, or an unexpected API result.
-- The code is dense by nature: a regex, a formula, or a complex algorithm.
-
-Do not write a comment:
-
-- On interface fields, types, or props when the name already says it.
-- To repeat the line below it.
-- To describe your change ("added new field", "now uses X").
-- As a section banner.
-- In code you did not touch.
-
-If a comment is needed to explain *what* the code does, use a better name or
-extract a function instead. Comment only as a fallback.
-
-Exception: exported functions of a shared package that other code imports get
-a short JSDoc block. The consumer sees only the signature. Describe what it
-does, the parameters, and the return value, not how it works internally.
-
-This section overrides the habit of matching the comment density of the file.
-
 ## Never do this without asking
 
 - Never run `git commit` or `git push`. Do so only when I ask directly.
