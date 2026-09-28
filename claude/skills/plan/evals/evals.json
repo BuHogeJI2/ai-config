@@ -1,0 +1,32 @@
+{
+  "skill_name": "plan",
+  "evals": [
+    {
+      "id": 0,
+      "name": "cold-vague-request",
+      "prompt": "write me a plan for adding caching to my api, its getting slow",
+      "expected_output": "Does NOT produce a plan. Identifies that key decisions are unresolved (which layer to cache, cache store, TTL/invalidation strategy, which endpoints, correctness constraints on the money path) and returns to discussion with concrete questions, ideally with recommendations attached.",
+      "files": [
+        "fixture repo"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "settled-discussion-with-open-item",
+      "prompt": "ok so following up on everything we just went through, recapping it all in one place so its not spread across the thread:\n\nwe're pulling the order-total calculation out of orderService into its own thing. decided: new pricing/ module, pure functions only, no db access inside it \u2014 the repositories stay the only thing that touches postgres, same layering rule as the rest of the repo. we keep the existing OrderTotal shape as the return type so nothing downstream has to change.\n\nthe discount rules become a lookup table instead of the if-chain thats in there now. reason is finance edits them about monthly and right now every change is a deploy. table lives in code for this pass \u2014 actual config-driven / db-backed rules is a later project, explicitly not in scope here.\n\ntesting: unit tests for the pure pricing functions, and the existing checkout integration test has to stay green through every single step, thats non-negotiable, its the only thing covering the money path.\n\nthe one thing we couldn't settle: whether the per-order user lookup needs batching. getRecentOrders calls getUserData once per order in a loop. i think its fine at our volume but honestly neither of us knows what the p99 actually is, we dont have the telemetry to answer it. so that one stays open until we can measure it.\n\ncan you write this up as a plan",
+      "expected_output": "Produces a full plan rendered in chat (no file, since no path was given). Phases are atomic and independently committable. Includes Task, Non-goals, Decisions & rationale with rejected alternatives, phase dependency table with a nature-of-dependency column, and an Open Questions section containing the batching/p99 item.",
+      "files": [
+        "fixture repo"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "trivial-mechanical-rename",
+      "prompt": "can you plan out renaming getUserData -> fetchUserProfile everywhere? the name's misleading now that it returns the profile object and not the raw row",
+      "expected_output": "Recognizes this is small and obviously ordered. Produces a short plan (task, approach, verification) rather than manufacturing five ceremonial phases with a dependency table.",
+      "files": [
+        "fixture repo"
+      ]
+    }
+  ]
+}

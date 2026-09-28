@@ -11,6 +11,14 @@
       "targets": [
         "~/.agents/skills/task-plan"
       ]
+    },
+    {
+      "id": "skill/plan",
+      "method": "symlink",
+      "source": "claude/skills/plan",
+      "targets": [
+        "~/.claude/skills/plan"
+      ]
     }
   ]
 }
