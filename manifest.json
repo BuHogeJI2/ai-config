@@ -19,6 +19,14 @@
       "targets": [
         "~/.claude/skills/plan"
       ]
+    },
+    {
+      "id": "skill/claude-review",
+      "method": "symlink",
+      "source": "codex/skills/claude-review",
+      "targets": [
+        "~/.agents/skills/claude-review"
+      ]
     }
   ]
 }

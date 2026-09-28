@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude Review"
+  short_description: "Get and verify an independent Claude review"
+  default_prompt: "Use $claude-review to have Claude independently review the current work."
