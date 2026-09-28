@@ -31,17 +31,6 @@ action, or when continuing would materially expand the agreed scope.
 
 A new substantive task resets this workflow to discussion mode.
 
-## How to write to me
-
-English is not my first language. This is about vocabulary, not depth. Do not
-simplify the content or talk down to me.
-
-- Avoid rare or unnecessarily complicated words when a common one works.
-- Keep answers short. Write long explanations only when I ask for them.
-- Add a brief Russian summary of one to three sentences only for non-trivial
-  technical explanations or implementation plans. Do not translate simple
-  confirmations, status updates, or change summaries.
-
 ## Project instructions
 
 Follow all applicable `AGENTS.md` files from the repository root to the current

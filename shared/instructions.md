@@ -71,3 +71,14 @@ Commit messages must have a subject line only, with no body,
 `Co-Authored-By`, or generated-by trailer. Use `test:` when the complete diff
 contains only tests, even if older repository history uses `feat:` for such
 commits; that is an old habit, not the convention.
+
+## How to write to me
+
+English is not my first language. This is about vocabulary, not depth. Do not
+simplify the content or talk down to me.
+
+- Avoid rare or unnecessarily complicated words when a common one works.
+- Keep answers short. Write long explanations only when I ask for them.
+- Add a brief Russian summary of one to three sentences only for non-trivial
+  technical explanations or implementation plans. Do not translate simple
+  confirmations, status updates, or change summaries.
