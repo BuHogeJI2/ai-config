@@ -8,7 +8,7 @@ from pathlib import Path, PurePosixPath
 from .content import scan_tree
 from .manifest import OWNERS, Manifest, ManifestError, load_manifest, skill_targets
 from .paths import Environment
-from .planner import CHANGES, CONFLICT, ORPHAN, build_plan, points_into
+from .planner import CHANGES, CONFLICT, ORPHAN, build_plan, is_unedited_generated_file, points_into
 from .runtime_checks import check_commands, check_mcp, check_skill_files, claude_mcp_inventory, codex_mcp_inventory
 from .skills import LocalSkill, discover, read_frontmatter
 from .state import State, StateError, load_state
@@ -163,6 +163,15 @@ def _check_state(repo_root: Path, env: Environment) -> tuple[State, list[Finding
             findings.append(
                 Finding(WARNING, f"state: {env.shorten(target)} points into another checkout {record.repo_root}; install relinks it")
             )
+    for target, record in sorted(state.generated.items()):
+        if is_unedited_generated_file(target, state):
+            continue
+        if record.pending:
+            findings.append(
+                Finding(WARNING, f"state: install was interrupted while writing {env.shorten(target)}; run install again")
+            )
+        else:
+            findings.append(Finding(WARNING, f"state: generated file was edited or removed: {env.shorten(target)}"))
     return state, findings
 
 

@@ -124,13 +124,14 @@ class LinkActionsTest(PlannerTestCase):
         self.addCleanup((local / "locked").chmod, 0o755)
         (action,) = self.plan(skill_entry("claude", "plan")).actions
         self.assertEqual(action.kind, CONFLICT)
-        self.assertTrue(action.detail.startswith("cannot compare: cannot read"))
+        self.assertTrue(action.detail.startswith("cannot read: cannot read"), action.detail)
 
-    def test_compose_is_not_supported_yet(self):
+    def test_compose_target_is_planned_as_a_file(self):
         self.write(self.repo / "codex/instructions.md", "x")
         entry = {"id": "i", "method": "compose", "sources": ["codex/instructions.md"], "targets": ["~/.codex/AGENTS.md"]}
         (action,) = self.plan(entry).actions
-        self.assertEqual((action.kind, action.detail), (CONFLICT, "the compose method is not supported yet"))
+        self.assertEqual(action.kind, CREATE)
+        self.assertTrue(action.output.endswith("\n\nx\n"))
 
 
 class LegacyCodexCopyTest(PlannerTestCase):

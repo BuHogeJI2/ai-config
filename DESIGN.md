@@ -84,7 +84,7 @@ A folder is created only when it has content. Plain Claude content folders such 
 
 ## Instructions
 
-Claude loads split instructions natively, so nothing is generated for Claude:
+The default layout links Claude's instruction files, because Claude loads split instructions natively:
 
 ```text
 ~/.claude/CLAUDE.md        -> link to claude/CLAUDE.md
@@ -93,18 +93,20 @@ Claude loads split instructions natively, so nothing is generated for Claude:
 
 When an agent is asked to change its global instructions, the edit goes to the repository source.
 
-Codex has no equivalent, so only its file is generated:
+Codex has no equivalent, so the default layout generates only its file:
 
 ```text
 ~/.codex/AGENTS.md = shared/instructions.md + codex/instructions.md
 ```
 
-The generated file starts with a marker saying it is generated and naming its sources. The state file stores a hash of each source and of the generated output:
+The `compose` method may target any supported instruction file (`CLAUDE.md`, a Claude rules file, or `AGENTS.md`), never a skill folder. The generated file starts with a marker naming its sources, followed by the sources joined by one blank line; each source is read once, and its leading and trailing blank lines are dropped. The state file stores a hash of each source and of the generated output:
 
 - On the first install, an existing file that equals the generated output without the marker is backed up and replaced. Any other existing content is a conflict.
 - If the sources changed and the output did not, `install` regenerates it.
-- If the output changed since it was generated, `install` reports a conflict and shows the diff. The local edit must be moved to a source file or discarded explicitly.
+- If the output changed since it was generated, `install` reports a conflict and `diff` shows it. The local edit must be moved to a source file or discarded explicitly with `--replace-local`.
 - `doctor` reports when the output is older than its sources, for example after `git pull`.
+- The tool owns a generated file only while its bytes match a recorded hash. Before publishing, the new hash is saved together with the previous one, so an interrupted run never looks like a local edit.
+- Changing an entry between `symlink` and `compose` replaces the managed link or the unedited generated file, with a backup.
 
 An optional local Git `post-merge` hook may run `ai-config doctor`. It is read-only and is installed only by the user.
 

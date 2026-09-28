@@ -49,8 +49,15 @@ class ManifestChecksTest(DoctorTestCase):
         entry = skill_entry("claude", "plan")
         entry["method"] = "compose"
         entry["sources"] = [entry.pop("source")]
+        entry["targets"] = ["~/.claude/rules/plan.md"]
         self.write_manifest([entry])
         self.assertFinding(ERROR, "skills must use the symlink method")
+
+    def test_compose_cannot_target_a_skill_folder(self):
+        self.write(self.repo / "shared/instructions.md", "x")
+        entry = {"id": "i", "method": "compose", "sources": ["shared/instructions.md"], "targets": ["~/.claude/skills/x"]}
+        self.write_manifest([entry])
+        self.assertFinding(ERROR, "compose writes a file and cannot target the skill folder ~/.claude/skills/x")
 
 
 class RepositorySkillChecksTest(DoctorTestCase):

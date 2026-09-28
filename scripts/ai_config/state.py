@@ -4,9 +4,10 @@ import errno
 import fcntl
 import json
 import os
+import re
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Iterator
 
 from .fileops import write_private_file
@@ -25,10 +26,32 @@ class LinkRecord:
     repo_root: Path
 
 
+@dataclass(frozen=True)
+class GeneratedRecord:
+    """A generated file.
+
+    Between the write-ahead save and the final save the record is `pending`: the new output may not be
+    published yet. `previous_hash` then names the previous output only if that output was ours, and a
+    link record for the same target is kept until publishing succeeds.
+    """
+
+    entry_id: str
+    output_hash: str
+    source_hashes: dict[str, str]
+    repo_root: Path
+    previous_hash: str | None = None
+    pending: bool = False
+
+    @property
+    def owned_hashes(self) -> set[str]:
+        return {self.output_hash} | ({self.previous_hash} if self.previous_hash else set())
+
+
 @dataclass
 class State:
     repo_root: Path | None = None
     links: dict[Path, LinkRecord] = field(default_factory=dict)
+    generated: dict[Path, GeneratedRecord] = field(default_factory=dict)
 
     def to_json(self) -> dict:
         return {
@@ -37,6 +60,17 @@ class State:
             "links": {
                 str(target): {"entry": record.entry_id, "link": record.link_text, "repo_root": str(record.repo_root)}
                 for target, record in sorted(self.links.items())
+            },
+            "generated": {
+                str(target): {
+                    "entry": record.entry_id,
+                    "output": record.output_hash,
+                    "previous": record.previous_hash,
+                    "pending": record.pending,
+                    "sources": dict(sorted(record.source_hashes.items())),
+                    "repo_root": str(record.repo_root),
+                }
+                for target, record in sorted(self.generated.items())
             },
         }
 
@@ -71,11 +105,52 @@ def load_state(state_dir: Path) -> State:
         ):
             raise StateError(f"{path} has a malformed link record for {target!r}")
         records[Path(target)] = LinkRecord(record["entry"], record["link"], Path(record["repo_root"]))
-    return State(repo_root=Path(repo_root) if repo_root else None, links=records)
+    generated = data.get("generated", {})
+    if not isinstance(generated, dict):
+        raise StateError(f"{path} has malformed generated records")
+    generated_records = {}
+    for target, record in generated.items():
+        if not isinstance(record, dict):
+            raise StateError(f"{path} has a malformed generated record for {target!r}")
+        sources = record.get("sources")
+        if not (
+            _is_absolute_path(target)
+            and isinstance(record.get("pending", False), bool)
+            and isinstance(record.get("entry"), str)
+            and _is_sha256(record.get("output"))
+            and (record.get("previous") is None or _is_sha256(record.get("previous")))
+            and isinstance(sources, dict)
+            and sources
+            and all(_is_repo_relative(key) and _is_sha256(value) for key, value in sources.items())
+            and _is_absolute_path(record.get("repo_root"))
+        ):
+            raise StateError(f"{path} has a malformed generated record for {target!r}")
+        if Path(target) in records and not record.get("pending", False):
+            raise StateError(f"{path} records {target!r} as both a link and a generated file")
+        generated_records[Path(target)] = GeneratedRecord(
+            record["entry"],
+            record["output"],
+            dict(sources),
+            Path(record["repo_root"]),
+            record.get("previous"),
+            record.get("pending", False),
+        )
+    return State(repo_root=Path(repo_root) if repo_root else None, links=records, generated=generated_records)
 
 
 def _is_absolute_path(value: object) -> bool:
     return isinstance(value, str) and os.path.isabs(value)
+
+
+def _is_sha256(value: object) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def _is_repo_relative(value: object) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    pure = PurePosixPath(value)
+    return str(pure) == value and value != "." and not pure.is_absolute() and ".." not in pure.parts
 
 
 def save_state(state_dir: Path, state: State) -> None:

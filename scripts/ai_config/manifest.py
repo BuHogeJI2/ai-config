@@ -96,6 +96,7 @@ def parse_manifest(data: Any) -> Manifest:
             entries.append(entry)
 
     _check_protected_targets(entries, external, problems)
+    _check_compose_targets(entries, problems)
     _check_unique([entry.id for entry in entries], "entry id", problems)
     _check_unique([target for entry in entries for target in entry.targets], "target", problems)
 
@@ -181,6 +182,15 @@ def _parse_requires(requires: Any, where: str, problems: list[str]) -> dict[str,
         else:
             parsed[key] = tuple(requires[key])
     return parsed
+
+
+def _check_compose_targets(entries: list[Entry], problems: list[str]) -> None:
+    for entry in entries:
+        if entry.method != "compose":
+            continue
+        for target in entry.targets:
+            if target.startswith(("~/.agents/skills/", "~/.claude/skills/")):
+                problems.append(f"entry '{entry.id}': compose writes a file and cannot target the skill folder {target}")
 
 
 def _check_protected_targets(entries: list[Entry], external: list[str], problems: list[str]) -> None:

@@ -338,6 +338,7 @@ class AdoptSafetyTest(FakeWorldTestCase):
         entry = skill_entry("claude", "plan")
         entry["method"] = "compose"
         entry["sources"] = [entry.pop("source"), "claude/CLAUDE.md"]
+        entry["targets"] = ["~/.claude/rules/plan.md"]
         self.write_manifest([entry])
         with self.assertRaisesRegex(AdoptError, "does not match claude/skills/plan"):
             adopt(self.repo, self.env, "claude", "plan", "claude", replace_repo=True)

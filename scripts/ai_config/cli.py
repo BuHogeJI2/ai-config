@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import os
 import sys
 from pathlib import Path
@@ -10,13 +11,14 @@ from .doctor import ERROR, LEVELS, WARNING, run_doctor
 from .fileops import TargetChangedError
 from .adopt import AGENTS, AdoptError, adopt
 from .backups import list_backups
+from .compose import ComposeError, compose
 from .installer import apply_plan
 from .manifest import OWNERS, Entry, Manifest, ManifestError, load_manifest
 from .paths import REPO_ROOT, Environment
 from .planner import CONFLICT, CREATE, RELINK, Plan, build_plan, link_destination
 from .restore import RestoreError, restore_backup
 from .state import StateError, exclusive_lock, load_state
-from .trees import TreeError, describe_differences
+from .trees import TreeError, describe_differences, read_regular_file
 from .uninstall import uninstall
 
 
@@ -183,9 +185,8 @@ def _diff(entry_id: str, manifest: Manifest, repo_root: Path, env: Environment, 
     if entry is None:
         print(f"error    no manifest entry '{entry_id}'", file=out)
         return 1
-    if entry.method != "symlink":
-        print(f"error    diff does not support the {entry.method} method yet", file=out)
-        return 1
+    if entry.method == "compose":
+        return _diff_generated(entry, repo_root, env, out)
 
     source = repo_root / entry.sources[0]
     source_label = entry.sources[0]
@@ -206,6 +207,37 @@ def _diff(entry_id: str, manifest: Manifest, repo_root: Path, env: Environment, 
             print(f"{shown}: identical to {source_label}" if not lines else f"{shown}: differs from {source_label}", file=out)
             for line in lines:
                 print(line, file=out)
+    return 0
+
+
+def _diff_generated(entry: Entry, repo_root: Path, env: Environment, out: TextIO) -> int:
+    try:
+        output = compose(repo_root, entry.sources).output
+    except ComposeError as error:
+        print(f"error    {error}", file=out)
+        return 1
+    for target in (env.expand(target) for target in entry.targets):
+        shown = env.shorten(target)
+        if target.is_symlink():
+            print(f"{shown}: link to {link_destination(target)}", file=out)
+            continue
+        if not os.path.lexists(target):
+            print(f"{shown}: missing", file=out)
+            continue
+        try:
+            data, _ = read_regular_file(target)
+        except TreeError as error:
+            print(f"{shown}: {error}", file=out)
+            continue
+        if data == output.encode("utf-8"):
+            print(f"{shown}: identical to the generated output", file=out)
+            continue
+        current = data.decode("utf-8", errors="replace")
+        print(f"{shown}: differs from the generated output", file=out)
+        for line in difflib.unified_diff(
+            current.splitlines(keepends=True), output.splitlines(keepends=True), fromfile=shown, tofile="generated"
+        ):
+            print(line.rstrip("\n"), file=out)
     return 0
 
 

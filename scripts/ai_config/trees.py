@@ -26,6 +26,28 @@ def signature(path: Path) -> Signature:
     return tree
 
 
+def read_regular_file(path: Path) -> tuple[bytes, os.stat_result]:
+    """Read a regular file without following a final link and without blocking on a FIFO swapped in."""
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError as error:
+        raise TreeError(f"cannot read {path}: {error.strerror or error}")
+    info = os.fstat(descriptor)
+    if not stat.S_ISREG(info.st_mode):
+        os.close(descriptor)
+        raise TreeError(f"not a regular file: {path}")
+    with os.fdopen(descriptor, "rb") as handle:
+        try:
+            return handle.read(), info
+        except OSError as error:
+            raise TreeError(f"cannot read {path}: {error.strerror or error}")
+
+
+def file_snapshot(data: bytes, info: os.stat_result) -> tuple:
+    """The snapshot of a regular file built from bytes already read, equal to snapshot() of that file."""
+    return ("tree", ((".", ("file", hashlib.sha256(data).hexdigest(), _executable(info))),))
+
+
 def snapshot(path: Path) -> tuple:
     """Describe what is at `path` now: missing, a link with its text, or a tree signature."""
     if not os.path.lexists(path):
@@ -68,7 +90,8 @@ def _add(path: Path, relative: str, tree: Signature) -> None:
         if stat.S_ISLNK(info.st_mode):
             tree[relative] = ("link", os.readlink(path))
         elif stat.S_ISREG(info.st_mode):
-            tree[relative] = ("file", hashlib.sha256(path.read_bytes()).hexdigest(), _executable(info))
+            data, opened = read_regular_file(path)
+            tree[relative] = ("file", hashlib.sha256(data).hexdigest(), _executable(opened))
         elif stat.S_ISDIR(info.st_mode):
             tree[relative] = ("dir",)
             for child in sorted(os.listdir(path)):

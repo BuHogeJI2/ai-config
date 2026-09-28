@@ -29,7 +29,7 @@ def write_text_file(path: Path, text: str, unchanged: Callable[[], bool] = lambd
     `unchanged` runs right before the replacement; if it returns False, TargetChangedError is raised
     and the file is left as it is. The temporary file never outlives a failure.
     """
-    mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
+    mode = path.stat().st_mode & 0o777 if path.exists() and not path.is_symlink() else 0o644
     temporary = temporary_sibling(path)
     descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, mode)
     try:
@@ -43,6 +43,26 @@ def write_text_file(path: Path, text: str, unchanged: Callable[[], bool] = lambd
         if os.path.lexists(temporary):
             os.unlink(temporary)
         raise
+
+
+def create_file(path: Path, text: str, unchanged: Callable[[], bool]) -> None:
+    """Create a new 0644 file without ever overwriting one that appears meanwhile."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = temporary_sibling(path)
+    descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.chmod(temporary, 0o644)
+        if not unchanged():
+            raise TargetChangedError(f"{path} changed after the plan was made")
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            raise TargetChangedError(f"{path} was created by someone else during install")
+    finally:
+        if os.path.lexists(temporary):
+            os.unlink(temporary)
 
 
 def place_symlink(target: Path, link_text: str, unchanged: Callable[[], bool]) -> None:

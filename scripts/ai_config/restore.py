@@ -8,7 +8,7 @@ from pathlib import Path
 from .backups import backups_dir, read_meta
 from .fileops import TargetChangedError, move_aside, remove_path, temporary_sibling
 from .paths import is_below
-from .planner import effective_location, link_destination, points_into
+from .planner import effective_location, link_destination, owned_generated_snapshot, points_into
 from .state import State, save_state
 from .trees import TreeError, signature, snapshot
 
@@ -25,7 +25,8 @@ class RestoreResult:
 
 def protected_roots(state: State, repo_root: Path) -> set[Path]:
     """This repository and every checkout a recorded link came from; nothing inside them is ever changed."""
-    return {repo_root.resolve()} | {record.repo_root for record in state.links.values()}
+    records = list(state.links.values()) + list(state.generated.values())
+    return {repo_root.resolve()} | {record.repo_root for record in records}
 
 
 def is_managed_link(target: Path, state: State, repo_root: Path) -> bool:
@@ -74,7 +75,8 @@ def restore_backup(backup_id: str, state: State, state_dir: Path, repo_root: Pat
         _restore_modes(target, meta, unchanged)
         _forget(target, state, state_dir)
         return RestoreResult(target, "already restored")
-    managed = is_managed_link(target, state, repo_root)
+    owned_generated = owned_generated_snapshot(target, state)
+    managed = is_managed_link(target, state, repo_root) or (owned_generated is not None and owned_generated == before)
     if before != ("missing",) and not managed:
         raise RestoreError(f"{target} has local content that differs from the backup; move it away first")
 
@@ -102,6 +104,7 @@ def restore_backup(backup_id: str, state: State, state_dir: Path, repo_root: Pat
 
 def _forget(target: Path, state: State, state_dir: Path) -> None:
     state.links.pop(target, None)
+    state.generated.pop(target, None)
     save_state(state_dir, state)
 
 
