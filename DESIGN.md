@@ -15,7 +15,7 @@ Version 1 manages:
 - Migration of existing local skills and instructions.
 - Validation (`doctor`), backup, restore, and uninstall.
 
-Version 1 does not write agent settings, hooks, rules, or MCP configuration. These are described under [Deferred to later versions](#deferred-to-later-versions) so the decisions are not lost.
+Version 1 does not write agent settings, hooks, Codex rules, or MCP configuration. Claude instruction files under `~/.claude/rules/` are in scope; they are instructions, not permission rules. These are described under [Deferred to later versions](#deferred-to-later-versions) so the decisions are not lost.
 
 ## Core principles
 
@@ -127,12 +127,14 @@ Codex also loads skills from `$CODEX_HOME/skills` (`~/.codex/skills` by default)
 
 ### Duplicate names
 
-`doctor` checks for duplicate skill names across every location an agent discovers skills from, not only the install target:
+`doctor` checks for duplicate skill names across the user-level, system, and plugin locations an agent discovers skills from, not only the install target:
 
 - Codex: `~/.agents/skills`, `~/.codex/skills` (including `.system`), and plugin skills.
 - Claude: `~/.claude/skills` (including `synced/`), and plugin skills.
 
 Both the directory name and the `name` field of `SKILL.md` are compared, without regard to letter case, because the default macOS file system is case-insensitive.
+
+Project-level skill folders inside application repositories and administrator-wide locations are out of scope: they depend on the working directory or on machine policy, not on this repository.
 
 ### Content rules
 
@@ -146,6 +148,8 @@ Some skills are installed and updated by an application, not written by the user
 
 Each skill may declare required CLI programs, MCP servers, and supported versions. Missing dependencies produce a clear diagnostic. The management tool never installs system dependencies.
 
+An MCP check proves only that a server is configured, not that it works. Codex configuration is TOML, and Python 3.9 has no TOML parser, so `doctor` reads only plain `[mcp_servers.<name>]` headers. A spelling it does not understand is reported as "could not determine", never as missing.
+
 ## Manifest
 
 `manifest.json` is the installation allowlist. Files are not installed merely because they exist in the repository, and `doctor` fails when a skill directory in the repository has no manifest entry.
@@ -156,8 +160,15 @@ Each entry describes:
 
 - A stable ID.
 - The installation method: `symlink` or `compose`.
-- Repository-relative sources.
-- Local targets, written with a leading `~/`.
+- Repository-relative sources. A source must stay inside the repository after symlinks are resolved.
+- Local targets, written with a leading `~/`. Only these shapes are allowed:
+  - `~/.agents/skills/<name>`
+  - `~/.claude/skills/<name>`
+  - `~/.claude/CLAUDE.md`
+  - `~/.claude/rules/<name>.md`
+  - `~/.codex/AGENTS.md`
+
+  A target under `~/.codex/` is resolved through `$CODEX_HOME` when it is set. Any other target, including agent home folders, settings, and credential files, is rejected.
 - Required dependencies, when applicable.
 
 Example:
@@ -229,9 +240,11 @@ For each target, the planner chooses one action:
 3. Target is a real local entry identical to the repository source: back it up and replace it with the link.
 4. Target differs from the repository source: conflict.
 5. Generated output was edited since the last install: conflict.
-6. Target is a broken link or points outside this repository: conflict.
-7. Link points into this repository but has no manifest entry (a removed or renamed skill): reported as a managed orphan and removed only with `--prune`.
-8. Local content with no repository entry: reported as unmanaged and never changed.
+6. Target is a link to another path inside this repository (for example, a skill moved between owners): relink it.
+7. Target is a link that the state file records as created by this tool and whose text still names the recorded source under the recorded old repository root (a moved checkout, even if the old checkout is gone): relink it.
+8. Any other broken link, or a link that points outside this repository: conflict.
+9. Link points into this repository but has no manifest entry (a removed or renamed skill): reported as a managed orphan and removed only with `--prune`.
+10. Local content with no repository entry: reported as unmanaged and never changed.
 
 For Codex targets, the planner also adds the action for the legacy copy in `~/.codex/skills` (see [Legacy Codex location](#legacy-codex-location)).
 
@@ -274,7 +287,7 @@ Every replaced or removed local entry is backed up under `backups/<backup-id>/` 
 
 The complete `~/.codex` and `~/.claude` directories, and any of their subfolders, must never be linked to the repository. They mix authored configuration with credentials, histories, sessions, caches, databases, downloaded plugins, device state, and automatic permission grants.
 
-In version 1 the tool never writes `~/.codex/config.toml`, `~/.claude/settings.json`, `~/.claude.json`, or any rules file. `doctor` may read them to report missing dependencies of managed skills, such as a required MCP server.
+In version 1 the tool never writes `~/.codex/config.toml`, `~/.claude/settings.json`, `~/.claude.json`, or any Codex rules file. `doctor` may read them to report missing dependencies of managed skills, such as a required MCP server.
 
 These are never adopted, managed, or stored in the repository, in any version:
 
@@ -313,7 +326,7 @@ Scripts inside skills are executable capabilities. Their code, dependencies, req
 - External skills that are links into this repository.
 - Missing referenced files, broken symlinks, and managed orphans.
 - Generated output that is older than its sources or was edited locally.
-- Script syntax and executable permissions.
+- Script syntax and executable permissions, without writing files (no `__pycache__`).
 - Declared CLI and MCP dependencies.
 - Absolute home-directory paths and paths into the repository checkout in managed content.
 - Common secret patterns and forbidden files.
