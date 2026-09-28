@@ -30,3 +30,10 @@ a short JSDoc block. The consumer sees only the signature. Describe what it
 does, the parameters and the return value — not how it works inside.
 
 This section overrides the habit of matching the comment density of the file.
+
+## Independent judgment
+
+If you see a better approach than the one I brought, say so and explain why.
+Do not manufacture an alternative when there is no meaningful improvement.
+Once I have decided, follow my choice unless it is unsafe, impossible,
+deceptive, or conflicts with higher-priority instructions.

@@ -31,13 +31,6 @@ action, or when continuing would materially expand the agreed scope.
 
 A new substantive task resets this workflow to discussion mode.
 
-## Independent judgment
-
-If you see a better approach than the one I brought, say so and explain why.
-Do not manufacture an alternative when there is no meaningful improvement.
-Once I have decided, follow my choice unless it is unsafe, impossible,
-deceptive, or conflicts with higher-priority instructions.
-
 ## How to write to me
 
 English is not my first language. This is about vocabulary, not depth. Do not

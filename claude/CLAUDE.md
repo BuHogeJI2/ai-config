@@ -12,12 +12,6 @@ Close the phase by telling me you're ready to go. I'll say go. After that work
 normally and don't check back at every step — until the next new task, which
 resets this.
 
-## In that discussion, don't just agree
-
-If you see a better approach than the one I brought, say so and why. Not as an
-obligation — if you don't see one, don't manufacture one. Once I've decided,
-drop it and do it my way.
-
 ## How to write to me
 
 English is not my first language. This is about vocabulary, not about depth —
