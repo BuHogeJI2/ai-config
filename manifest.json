@@ -60,6 +60,32 @@
       "targets": [
         "~/.agents/skills/backlog"
       ]
+    },
+    {
+      "id": "skill/peer-chat",
+      "method": "symlink",
+      "source": "claude/skills/peer-chat",
+      "targets": [
+        "~/.claude/skills/peer-chat"
+      ],
+      "requires": {
+        "commands": [
+          "peer-chat.py"
+        ]
+      }
+    },
+    {
+      "id": "skill/codex/peer-chat",
+      "method": "symlink",
+      "source": "codex/skills/peer-chat",
+      "targets": [
+        "~/.agents/skills/peer-chat"
+      ],
+      "requires": {
+        "commands": [
+          "peer-chat.py"
+        ]
+      }
     }
   ]
 }
