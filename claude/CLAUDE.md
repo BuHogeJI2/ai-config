@@ -22,33 +22,6 @@ do not simplify the content or talk down to me.
 - Add a short Russian translation when you explain technical details of an
   implementation, or when we are planning work.
 
-## Never do this without asking
-
-- Never run `git commit` or `git push`. Only when I ask you directly. See
-  `## Commits` for what does and does not count as asking.
-- Never put `.env` files or secrets into git.
-- Never create files I did not ask for — no summary, notes, docs or reports.
-
-## Commits
-
-Use the `/commit-me` skill for every commit. Do not hand-write a message
-without it.
-
-Wait for a direct "commit". These are **not** the go-ahead:
-- Finishing the work, or a green test run.
-- "Go with phase 3" — that authorizes the work, not the commit.
-- A plan listing a commit per phase. It fixes the wording to use later, not
-  permission to use it now.
-- My answer to a question about commit strategy (squash or split, land it red
-  or hold it). That settles *how*, never *when*.
-
-When you are done, report what changed, say it is uncommitted, and stop.
-
-Message rules:
-- Subject line only. No body, no `Co-Authored-By`, no "Generated with" trailer.
-- Type `test:` when the diff is tests. Some repos still type these `feat:` —
-  that is the old habit in their history, not the convention. Do not copy it.
-
 ## Projects
 
 Read `agents.md` in the project root if it exists.

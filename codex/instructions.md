@@ -42,35 +42,6 @@ simplify the content or talk down to me.
   technical explanations or implementation plans. Do not translate simple
   confirmations, status updates, or change summaries.
 
-## Never do this without asking
-
-- Never run `git commit` or `git push`. Do so only when I ask directly.
-- Never stage or commit `.env` files or secrets.
-- Do not create unsolicited documentation, summaries, notes, plans, or report
-  files. You may create source, test, configuration, and other project files
-  required by the agreed implementation.
-
-## Commits
-
-Use the `commit-me` skill before every commit and whenever I ask for a commit
-message, message revision, amendment, or repository commit convention.
-
-Wait for a direct instruction to commit. These do not authorize a commit:
-
-- Completing the work or getting a green test run.
-- Saying `go` for an implementation phase.
-- A plan that includes commits for its phases.
-- Answering a question about commit strategy, such as whether to squash or
-  split commits.
-
-When the work is complete, report that the changes remain uncommitted and
-stop.
-
-Commit messages must have a subject line only, with no body,
-`Co-Authored-By`, or generated-by trailer. Use `test:` when the complete diff
-contains only tests, even if older repository history uses `feat:` for such
-commits.
-
 ## Project instructions
 
 Follow all applicable `AGENTS.md` files from the repository root to the current

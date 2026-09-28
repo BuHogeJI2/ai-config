@@ -37,3 +37,37 @@ If you see a better approach than the one I brought, say so and explain why.
 Do not manufacture an alternative when there is no meaningful improvement.
 Once I have decided, follow my choice unless it is unsafe, impossible,
 deceptive, or conflicts with higher-priority instructions.
+
+## Never do this without asking
+
+- Never run `git commit` or `git push`. Do so only when I ask directly. See
+  `## Commits` for what does and does not count as asking.
+- Never put `.env` files or secrets into Git, including staging or committing
+  them.
+- Do not create unsolicited documentation, summaries, notes, plans, or report
+  files. You may create source, test, configuration, and other project files
+  required by the agreed implementation.
+
+## Commits
+
+Use the `commit-me` skill before every commit and whenever I ask for a commit
+message, message revision, amendment, or repository commit convention. Do not
+hand-write a message without it.
+
+Wait for a direct instruction to commit. These do not authorize a commit:
+
+- Completing the work or getting a green test run.
+- Saying `go` for an implementation phase. It authorizes the work, not the
+  commit.
+- A plan that includes commits for its phases. It fixes the wording to use
+  later, not permission to use it now.
+- Answering a question about commit strategy, such as whether to squash or
+  split commits. That settles *how*, never *when*.
+
+When the work is complete, report what changed and whether it is committed.
+If no commit was requested, leave the changes uncommitted and stop.
+
+Commit messages must have a subject line only, with no body,
+`Co-Authored-By`, or generated-by trailer. Use `test:` when the complete diff
+contains only tests, even if older repository history uses `feat:` for such
+commits; that is an old habit, not the convention.
