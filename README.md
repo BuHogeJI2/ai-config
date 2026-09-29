@@ -94,6 +94,10 @@ Some skills need more:
 `install` does not check these. `scripts/ai-config doctor` reports a program that a manifest entry
 requires and that is missing from `PATH`.
 
+A machine with only one agent can install for that agent alone (see
+[Install on a new machine](#install-on-a-new-machine)). This does not remove what a skill needs: the
+Codex `claude-review` skill still runs Claude, and `peer-chat` still needs a Claude pane.
+
 ### Install peer-chat.py
 
 `peer-chat.py` comes from the agterm cookbook and is not part of this repository. Install the pinned,
@@ -149,6 +153,24 @@ Clone the repository anywhere and keep it there: the installed links point into 
 ```sh
 git clone https://github.com/BuHogeJI2/ai-config.git
 cd ai-config
+```
+
+If the machine has only one of the agents, name it with `--agents`:
+
+```sh
+scripts/ai-config doctor --agents codex
+scripts/ai-config install --dry-run --agents codex
+scripts/ai-config install --agents codex
+```
+
+Use `claude` for a Claude-only machine. Nothing is written to the other agent's folder. An `install`
+whose plan has no conflict saves the choice for this machine, and later commands use it without the
+flag. A dry run or an install stopped by a conflict saves nothing, so keep `--agents` on every command,
+including the conflict steps below, until an install goes through.
+
+Without `--agents` and without a saved choice, the tool works for both agents:
+
+```sh
 scripts/ai-config doctor
 scripts/ai-config install --dry-run
 ```
@@ -230,7 +252,7 @@ scripts/ai-config install
 ```
 
 `doctor` reports when the generated `~/.codex/AGENTS.md` is older than its sources. `install` links new
-skills and regenerates the file.
+skills and regenerates the file. Both use the agents saved on this machine.
 
 When a pull removed or renamed a skill or an instruction entry, `doctor` reports the old target as an
 orphan. Check the plan, then remove the old targets:
@@ -244,6 +266,26 @@ scripts/ai-config install --prune
 generated instruction file that is still unedited. An old plain copy of a skill, left from before this
 repository managed it, stays in place; `doctor` lists it as unmanaged. Back it up, then remove it
 yourself.
+
+### Change the agents
+
+To add an agent, name the complete new set:
+
+```sh
+scripts/ai-config install --dry-run --agents codex,claude
+scripts/ai-config install --agents codex,claude
+```
+
+To stop using one, name the agent you keep and add `--prune`:
+
+```sh
+scripts/ai-config install --dry-run --agents codex --prune
+scripts/ai-config install --agents codex --prune
+```
+
+This removes, with a backup, the other agent's links into this repository and its unedited generated
+file. Edited files and your own content stay. Without `--prune` nothing is removed, and `doctor` reports
+those links as orphans with "agent disabled".
 
 ## Add a skill
 
@@ -304,6 +346,10 @@ scripts/ai-config restore <backup-id>  # put one back
 restored target is no longer managed. While its manifest entry is still there, the next `install`
 replaces the restored copy again (with a backup) if it equals the repository version, and reports a
 conflict if it differs. To keep it, remove the entry first.
+
+`restore` does not look at the saved agents, so it can put back a file of an agent this machine no longer
+uses. A restored link into this repository is removed again by the next `install --prune`; a restored
+copy stays.
 
 The state and backups live outside the repository and are never committed.
 
