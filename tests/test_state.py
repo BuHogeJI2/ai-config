@@ -22,6 +22,17 @@ class StateFileTest(FakeWorldTestCase):
         self.assertEqual(mode(self.env.state_dir), 0o700)
         self.assertEqual(mode(self.env.state_dir / "state.json"), 0o600)
 
+    def test_agents_round_trip(self):
+        for agents in (("codex",), ("claude",), ("codex", "claude")):
+            with self.subTest(agents=agents):
+                save_state(self.env.state_dir, State(repo_root=self.repo, agents=agents))
+                self.assertEqual(load_state(self.env.state_dir).agents, agents)
+
+    def test_missing_agents_means_no_saved_choice(self):
+        save_state(self.env.state_dir, State(repo_root=self.repo))
+        self.assertNotIn("agents", (self.env.state_dir / "state.json").read_text(encoding="utf-8"))
+        self.assertIsNone(load_state(self.env.state_dir).agents)
+
     def test_invalid_state_is_an_error(self):
         for text in (
             "{",
@@ -34,6 +45,13 @@ class StateFileTest(FakeWorldTestCase):
             '{"version": 1, "links": {"/a": {"entry": 1, "link": "/r/x", "repo_root": "/r"}}}',
             '{"version": 1, "links": {"/a": {"entry": "x", "link": "", "repo_root": "/r"}}}',
             '{"version": 1, "links": {"/a": {"entry": "x", "link": "/r/x", "repo_root": null}}}',
+            '{"version": 1, "links": {}, "agents": null}',
+            '{"version": 1, "links": {}, "agents": "codex"}',
+            '{"version": 1, "links": {}, "agents": []}',
+            '{"version": 1, "links": {}, "agents": [1]}',
+            '{"version": 1, "links": {}, "agents": ["gemini"]}',
+            '{"version": 1, "links": {}, "agents": ["codex", "codex"]}',
+            '{"version": 1, "links": {}, "agents": ["claude", "codex"]}',
         ):
             with self.subTest(text=text):
                 self.write(self.env.state_dir / "state.json", text)

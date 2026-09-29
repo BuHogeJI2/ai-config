@@ -11,6 +11,7 @@ from urllib.parse import unquote
 from pathlib import Path
 from typing import Callable
 
+from .agents import canonical, target_agent
 from .manifest import Entry
 from .paths import Environment
 
@@ -48,13 +49,8 @@ class McpInventory:
         return UNKNOWN if self.unsure else MISSING
 
 
-def entry_agents(entry: Entry) -> list[str]:
-    agents = []
-    if any(target.startswith("~/.agents/") or target.startswith("~/.codex/") for target in entry.targets):
-        agents.append("codex")
-    if any(target.startswith("~/.claude/") for target in entry.targets):
-        agents.append("claude")
-    return agents
+def entry_agents(entry: Entry) -> tuple[str, ...]:
+    return canonical(target_agent(target) for target in entry.targets)
 
 
 def check_commands(entry: Entry, which: Callable[[str], str | None] = shutil.which) -> list[RuntimeProblem]:

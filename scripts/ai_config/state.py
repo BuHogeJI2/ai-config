@@ -8,8 +8,9 @@ import re
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Iterator
+from typing import Iterator, Optional
 
+from .agents import AGENTS, canonical
 from .fileops import write_private_file
 
 STATE_VERSION = 1
@@ -52,9 +53,10 @@ class State:
     repo_root: Path | None = None
     links: dict[Path, LinkRecord] = field(default_factory=dict)
     generated: dict[Path, GeneratedRecord] = field(default_factory=dict)
+    agents: Optional[tuple[str, ...]] = None
 
     def to_json(self) -> dict:
-        return {
+        data = {
             "version": STATE_VERSION,
             "repo_root": str(self.repo_root) if self.repo_root else None,
             "links": {
@@ -73,6 +75,9 @@ class State:
                 for target, record in sorted(self.generated.items())
             },
         }
+        if self.agents is not None:
+            data["agents"] = list(self.agents)
+        return data
 
 
 def state_file(state_dir: Path) -> Path:
@@ -135,7 +140,25 @@ def load_state(state_dir: Path) -> State:
             record.get("previous"),
             record.get("pending", False),
         )
-    return State(repo_root=Path(repo_root) if repo_root else None, links=records, generated=generated_records)
+    agents = data.get("agents")
+    if "agents" in data and not _is_agent_list(agents):
+        raise StateError(f"{path} has a malformed agents list")
+    return State(
+        repo_root=Path(repo_root) if repo_root else None,
+        links=records,
+        generated=generated_records,
+        agents=tuple(agents) if agents is not None else None,
+    )
+
+
+def _is_agent_list(value: object) -> bool:
+    """A non-empty list of known agents without repeats, in the order of `AGENTS`."""
+    return (
+        isinstance(value, list)
+        and bool(value)
+        and all(isinstance(agent, str) and agent in AGENTS for agent in value)
+        and list(canonical(value)) == value
+    )
 
 
 def _is_absolute_path(value: object) -> bool:

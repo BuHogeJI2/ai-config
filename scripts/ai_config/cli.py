@@ -9,7 +9,8 @@ from typing import Mapping, Sequence, TextIO
 
 from .doctor import ERROR, LEVELS, WARNING, run_doctor
 from .fileops import TargetChangedError
-from .adopt import AGENTS, AdoptError, adopt
+from .adopt import AdoptError, adopt
+from .agents import AGENTS
 from .backups import list_backups
 from .compose import ComposeError, compose
 from .installer import apply_plan

@@ -7,14 +7,13 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from .agents import AGENTS
 from .content import scan_tree
 from .fileops import TargetChangedError, remove_path, temporary_sibling, write_text_file
 from .manifest import OWNERS, ManifestError, is_manageable_name, parse_manifest, skill_targets
 from .paths import Environment, is_below
 from .planner import effective_location, points_into
 from .trees import IGNORED_NAMES, TreeError, identical, signature, snapshot
-
-AGENTS = ("codex", "claude")
 
 
 class AdoptError(Exception):
