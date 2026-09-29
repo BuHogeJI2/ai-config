@@ -5,11 +5,19 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from .agents import AGENTS, CLAUDE, CODEX, target_agent
 from .content import scan_tree
 from .manifest import OWNERS, Manifest, ManifestError, load_manifest, skill_targets
 from .paths import Environment
 from .planner import CHANGES, CONFLICT, ORPHAN, build_plan, is_unedited_generated_file, points_into
-from .runtime_checks import check_commands, check_mcp, check_skill_files, claude_mcp_inventory, codex_mcp_inventory
+from .runtime_checks import (
+    check_commands,
+    check_mcp,
+    check_skill_files,
+    claude_mcp_inventory,
+    codex_mcp_inventory,
+    entry_agents,
+)
 from .skills import LocalSkill, discover, read_frontmatter
 from .state import State, StateError, load_state
 
@@ -27,7 +35,8 @@ class Finding:
     message: str
 
 
-def run_doctor(repo_root: Path, env: Environment) -> list[Finding]:
+def run_doctor(repo_root: Path, env: Environment, agents: tuple[str, ...] = AGENTS) -> list[Finding]:
+    """Check the whole repository, and this machine for the selected agents only."""
     findings: list[Finding] = []
     try:
         manifest = load_manifest(repo_root / "manifest.json")
@@ -35,17 +44,31 @@ def run_doctor(repo_root: Path, env: Environment) -> list[Finding]:
         findings += [Finding(ERROR, f"manifest: {problem}") for problem in error.problems]
         manifest = Manifest(external=(), entries=())
 
-    state, state_findings = _check_state(repo_root, env)
+    state, state_findings = _check_state(repo_root, env, *_current_targets(env, manifest, agents))
     findings += state_findings
-    local_skills = discover(env)
+    local_skills = discover(env, agents)
     findings += _check_entries(repo_root, manifest)
     findings += _check_repo_skills(repo_root, manifest)
     findings += _check_duplicates(local_skills, env)
     findings += _check_local_skills(local_skills, manifest, repo_root, env)
-    findings += _check_install_plan(repo_root, env, manifest, state)
-    findings += _check_runtime(repo_root, env, manifest)
+    findings += _check_install_plan(repo_root, env, manifest, state, agents)
+    findings += _check_runtime(repo_root, env, manifest, agents)
     findings += _check_repo_content(repo_root)
     return findings
+
+
+def _current_targets(env: Environment, manifest: Manifest, agents: tuple[str, ...]) -> tuple[set[Path], dict[Path, str]]:
+    """Split the manifest targets into those of selected agents and a map of the others to their agent."""
+    active: set[Path] = set()
+    disabled: dict[Path, str] = {}
+    for entry in manifest.entries:
+        for target in entry.targets:
+            agent = target_agent(target)
+            if agent in agents:
+                active.add(env.expand(target))
+            else:
+                disabled[env.expand(target)] = agent
+    return active, disabled
 
 
 def _check_entries(repo_root: Path, manifest: Manifest) -> list[Finding]:
@@ -67,14 +90,17 @@ def _check_entries(repo_root: Path, manifest: Manifest) -> list[Finding]:
     return findings
 
 
-def _check_runtime(repo_root: Path, env: Environment, manifest: Manifest) -> list[Finding]:
+def _check_runtime(repo_root: Path, env: Environment, manifest: Manifest, agents: tuple[str, ...]) -> list[Finding]:
     problems = []
     inventories = None
+    readers = {CODEX: codex_mcp_inventory, CLAUDE: claude_mcp_inventory}
     for entry in manifest.entries:
+        if not set(entry_agents(entry)) & set(agents):
+            continue
         problems += check_commands(entry)
         if entry.requires.get("mcp"):
-            inventories = inventories or {"codex": codex_mcp_inventory(env), "claude": claude_mcp_inventory(env)}
-            problems += check_mcp(entry, inventories)
+            inventories = inventories or {agent: readers[agent](env) for agent in agents}
+            problems += check_mcp(entry, inventories, agents)
         for source in entry.sources:
             if _skill_source(source) and (repo_root / source).is_dir():
                 problems += check_skill_files(repo_root / source, source)
@@ -150,7 +176,14 @@ def _check_local_skills(
     return findings
 
 
-def _check_state(repo_root: Path, env: Environment) -> tuple[State, list[Finding]]:
+def _check_state(
+    repo_root: Path, env: Environment, active: set[Path], disabled: dict[Path, str]
+) -> tuple[State, list[Finding]]:
+    """Report recorded targets that changed, with what install will do about each.
+
+    `active` holds the manifest targets of the selected agents; `disabled` maps the others to their agent.
+    A record in neither is no longer a manifest target, for example after its entry or CODEX_HOME changed.
+    """
     try:
         state = load_state(env.state_dir)
     except StateError as error:
@@ -160,24 +193,40 @@ def _check_state(repo_root: Path, env: Environment) -> tuple[State, list[Finding
         if not target.is_symlink() or os.readlink(target) != record.link_text:
             findings.append(Finding(WARNING, f"state: recorded link was changed or removed: {env.shorten(target)}"))
         elif record.repo_root != repo_root.resolve():
+            outcome = _outcome(
+                target, active, disabled, "install relinks it", "install --prune removes it"
+            )
             findings.append(
-                Finding(WARNING, f"state: {env.shorten(target)} points into another checkout {record.repo_root}; install relinks it")
+                Finding(WARNING, f"state: {env.shorten(target)} points into another checkout {record.repo_root}; {outcome}")
             )
     for target, record in sorted(state.generated.items()):
         if is_unedited_generated_file(target, state):
             continue
         if record.pending:
+            outcome = _outcome(
+                target, active, disabled, "run install again", "install does not finish it"
+            )
             findings.append(
-                Finding(WARNING, f"state: install was interrupted while writing {env.shorten(target)}; run install again")
+                Finding(WARNING, f"state: install was interrupted while writing {env.shorten(target)}; {outcome}")
             )
         else:
             findings.append(Finding(WARNING, f"state: generated file was edited or removed: {env.shorten(target)}"))
     return state, findings
 
 
-def _check_install_plan(repo_root: Path, env: Environment, manifest: Manifest, state: State) -> list[Finding]:
+def _outcome(target: Path, active: set[Path], disabled: dict[Path, str], if_active: str, if_disabled: str) -> str:
+    if target in active:
+        return if_active
+    if target in disabled:
+        return f"agent {disabled[target]} is disabled; {if_disabled}"
+    return "it is no longer a manifest target"
+
+
+def _check_install_plan(
+    repo_root: Path, env: Environment, manifest: Manifest, state: State, agents: tuple[str, ...]
+) -> list[Finding]:
     findings = []
-    for action in build_plan(repo_root, env, manifest, state).actions:
+    for action in build_plan(repo_root, env, manifest, state, agents=agents).actions:
         shown = env.shorten(action.target)
         if action.kind == CONFLICT:
             findings.append(Finding(ERROR, f"install conflict at {shown}: {action.detail}"))

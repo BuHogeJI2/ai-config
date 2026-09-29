@@ -49,6 +49,15 @@ class DiscoverTest(FakeWorldTestCase):
             },
         )
 
+    def test_reads_only_the_selected_agents(self):
+        self.add_skill(self.env.codex_skills, "codex-personal")
+        self.add_skill(self.env.claude_skills, "claude-personal")
+        self.add_skill(self.home / ".claude/plugins/cache/market/tool/skills", "claude-plugin")
+        found = {(skill.agent, skill.name) for skill in discover(self.env, ("codex",))}
+        self.assertEqual(found, {("codex", "codex-personal")})
+        found = {(skill.agent, skill.name) for skill in discover(self.env, ("claude",))}
+        self.assertEqual(found, {("claude", "claude-personal"), ("claude", "claude-plugin")})
+
     def test_skips_folders_without_skill_md_and_ignored_places(self):
         (self.env.claude_skills / "empty").mkdir(parents=True)
         self.add_skill(self.home / ".claude/plugins/marketplaces/official/tool/skills", "not-installed")

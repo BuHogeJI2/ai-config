@@ -11,7 +11,7 @@ from urllib.parse import unquote
 from pathlib import Path
 from typing import Callable
 
-from .agents import canonical, target_agent
+from .agents import AGENTS, canonical, target_agent
 from .manifest import Entry
 from .paths import Environment
 
@@ -61,9 +61,13 @@ def check_commands(entry: Entry, which: Callable[[str], str | None] = shutil.whi
     ]
 
 
-def check_mcp(entry: Entry, inventories: dict[str, McpInventory]) -> list[RuntimeProblem]:
+def check_mcp(
+    entry: Entry, inventories: dict[str, McpInventory], agents: tuple[str, ...] = AGENTS
+) -> list[RuntimeProblem]:
     problems = []
     for agent in entry_agents(entry):
+        if agent not in agents:
+            continue
         inventory = inventories[agent]
         for name in entry.requires.get("mcp", ()):
             status = inventory.status(name)

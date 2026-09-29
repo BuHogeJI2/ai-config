@@ -1,15 +1,20 @@
+from unittest import mock
+
 from ai_config.doctor import ERROR, INFO, WARNING, run_doctor
-from ai_config.state import LinkRecord, State, save_state
+from ai_config.paths import Environment
+from ai_config.state import GeneratedRecord, LinkRecord, State, save_state
 from tests.helpers import FakeWorldTestCase, skill_entry
 
 FAKE_API_KEY = "sk-" + "a1B2" * 8
 
 
 class DoctorTestCase(FakeWorldTestCase):
+    agents = ("codex", "claude")
+
     def findings(self, level=None):
         return [
             finding.message
-            for finding in run_doctor(self.repo, self.env)
+            for finding in run_doctor(self.repo, self.env, self.agents)
             if level is None or finding.level == level
         ]
 
@@ -245,3 +250,99 @@ class RepositoryContentChecksTest(DoctorTestCase):
         self.write(self.repo / ".git/config", FAKE_API_KEY)
         self.write(self.repo / "scripts/__pycache__/x.log", "x")
         self.assertEqual(self.findings(), [])
+
+
+class SelectedAgentsTest(DoctorTestCase):
+    agents = ("codex",)
+
+    def setUp(self):
+        super().setUp()
+        self.shared = self.add_skill(self.repo / "shared/skills", "plan")
+        self.claude_only = self.add_skill(self.repo / "claude/skills", "review")
+        review = skill_entry("claude", "review")
+        review["requires"] = {"commands": ["surely-not-installed-ai-config"], "mcp": ["docs"]}
+        shared = skill_entry("shared", "plan")
+        shared["requires"] = {"mcp": ["docs"]}
+        self.write_manifest([shared, review])
+        self.write(self.env.codex_home / "config.toml", "[mcp_servers.docs]\n")
+
+    def test_installed_codex_only_home_is_clean(self):
+        self.link(self.env.codex_skills / "plan", self.shared)
+        self.assertEqual(self.findings(), [])
+
+    def test_claude_folders_and_mcp_config_are_never_read(self):
+        self.link(self.env.codex_skills / "plan", self.shared)
+        with mock.patch("ai_config.doctor.claude_mcp_inventory") as claude_mcp, mock.patch(
+            "ai_config.skills._plugin_skills", return_value=[]
+        ) as plugins:
+            self.findings()
+        claude_mcp.assert_not_called()
+        self.assertEqual({call.args[0] for call in plugins.call_args_list}, {"codex"})
+
+    def test_local_claude_skills_are_not_reported(self):
+        self.link(self.env.codex_skills / "plan", self.shared)
+        self.add_skill(self.env.claude_skills, "mine")
+        self.assertEqual(self.findings(), [])
+
+    def test_repository_checks_still_cover_both_agents(self):
+        self.write_manifest([skill_entry("shared", "plan", targets=["~/.agents/skills/plan"])])
+        self.assertFinding(ERROR, "entry 'skill/plan': targets must be")
+        self.add_skill(self.repo / "claude/skills", "unlisted")
+        self.assertFinding(ERROR, "claude/skills/unlisted: skill has no manifest entry")
+
+    def test_retained_claude_link_is_reported_as_disabled(self):
+        self.link(self.env.codex_skills / "plan", self.shared)
+        self.link(self.env.claude_skills / "plan", self.shared)
+        self.assertFinding(WARNING, "orphan link ~/.claude/skills/plan: agent disabled: claude")
+
+    def test_state_messages_for_a_disabled_agent(self):
+        self.agents = ("claude",)
+        old_root = self.home / "old-repo"
+        moved = self.env.codex_skills / "plan"
+        self.link(moved, old_root / "shared/skills/plan")
+        generated = self.env.codex_home / "AGENTS.md"
+        self.write(generated, "Edited.\n")
+        self.write_manifest(
+            [
+                skill_entry("shared", "plan"),
+                {"id": "instructions/codex", "method": "compose", "sources": ["shared/i.md"], "targets": ["~/.codex/AGENTS.md"]},
+            ]
+        )
+        record = GeneratedRecord("instructions/codex", "0" * 64, {"shared/i.md": "1" * 64}, old_root, pending=True)
+        save_state(
+            self.env.state_dir,
+            State(
+                old_root,
+                {moved: LinkRecord("skill/plan", str(old_root / "shared/skills/plan"), old_root)},
+                {generated: record},
+            ),
+        )
+        self.assertFinding(WARNING, "points into another checkout")
+        self.assertFinding(WARNING, "agent codex is disabled; install --prune removes it")
+        self.assertFinding(WARNING, "agent codex is disabled; install does not finish it")
+        self.assertFalse(any("install relinks it" in message for message in self.findings()))
+
+    def test_records_no_longer_in_the_manifest_get_no_promise(self):
+        self.agents = ("claude",)
+        old_root = self.home / "old-repo"
+        removed = self.env.claude_skills / "gone"
+        self.link(removed, old_root / "claude/skills/gone")
+        generated = self.env.codex_home / "AGENTS.md"
+        self.write(generated, "Original.\n")
+        self.write_manifest(
+            [{"id": "instructions/codex", "method": "compose", "sources": ["shared/i.md"], "targets": ["~/.codex/AGENTS.md"]}]
+        )
+        record = GeneratedRecord("instructions/codex", "0" * 64, {"shared/i.md": "1" * 64}, old_root, pending=True)
+        save_state(
+            self.env.state_dir,
+            State(
+                old_root,
+                {removed: LinkRecord("skill/gone", str(old_root / "claude/skills/gone"), old_root)},
+                {generated: record},
+            ),
+        )
+        self.env = Environment.from_env({"HOME": str(self.home), "CODEX_HOME": str(self.home / "new-codex")})
+        self.assertFinding(WARNING, "~/.claude/skills/gone points into another checkout")
+        self.assertFinding(WARNING, "install was interrupted while writing ~/.codex/AGENTS.md; it is no longer a manifest target")
+        messages = self.findings()
+        self.assertFalse(any("relinks it" in m or "run install again" in m for m in messages), messages)

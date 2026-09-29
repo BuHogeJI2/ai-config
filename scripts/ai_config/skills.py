@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from .agents import AGENTS, CLAUDE, CODEX
 from .paths import Environment
 
 _FIELD = re.compile(r"^([A-Za-z0-9_-]+):\s*(.*)$")
@@ -46,18 +47,21 @@ def read_frontmatter(skill_md: Path) -> dict[str, str] | None:
     return None
 
 
-def discover(env: Environment) -> list[LocalSkill]:
+def discover(env: Environment, agents: tuple[str, ...] = AGENTS) -> list[LocalSkill]:
+    """Find the local skills of the selected agents; the folders of other agents are never read."""
     skills: list[LocalSkill] = []
-    skills += _children("codex", "personal", env.codex_skills)
-    if env.codex_legacy_skills_are_separate:
-        skills += _children("codex", "legacy", env.codex_legacy_skills)
-    skills += _children("codex", "system", env.codex_legacy_skills / ".system")
-    skills += _plugin_skills("codex", env.codex_home / "plugins" / "cache")
-    skills += _children("claude", "personal", env.claude_skills)
-    for bucket in _subdirectories(env.claude_skills / "synced"):
-        skills += _children("claude", "synced", bucket)
-    skills += _plugin_skills("claude", env.claude_home / "plugins" / "cache")
-    skills += _plugin_skills("claude", env.claude_home / "plugins" / "synced")
+    if CODEX in agents:
+        skills += _children("codex", "personal", env.codex_skills)
+        if env.codex_legacy_skills_are_separate:
+            skills += _children("codex", "legacy", env.codex_legacy_skills)
+        skills += _children("codex", "system", env.codex_legacy_skills / ".system")
+        skills += _plugin_skills("codex", env.codex_home / "plugins" / "cache")
+    if CLAUDE in agents:
+        skills += _children("claude", "personal", env.claude_skills)
+        for bucket in _subdirectories(env.claude_skills / "synced"):
+            skills += _children("claude", "synced", bucket)
+        skills += _plugin_skills("claude", env.claude_home / "plugins" / "cache")
+        skills += _plugin_skills("claude", env.claude_home / "plugins" / "synced")
     return skills
 
 

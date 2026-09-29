@@ -130,6 +130,11 @@ class CheckMcpTest(unittest.TestCase):
         problems = check_mcp(entry("codex", mcp=["docs"]), inventories)
         self.assertEqual([p.message for p in problems], ["entry 'skill/plan': codex MCP server 'docs' is not configured"])
 
+    def test_checks_only_selected_agents(self):
+        inventories = {"codex": McpInventory(names={"docs"})}
+        self.assertEqual(check_mcp(entry("shared", mcp=["docs"]), inventories, ("codex",)), [])
+        self.assertEqual(check_mcp(entry("claude", mcp=["docs"]), inventories, ("codex",)), [])
+
 
 class SkillFilesTest(FakeWorldTestCase):
     def messages(self, skill):
