@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from .agents import AGENTS, target_agent
 from .compose import ComposeError, compose, text_hash
 from .manifest import Entry, Manifest, is_manageable_name
 from .paths import Environment, is_below
@@ -64,26 +65,36 @@ def build_plan(
     state: State | None = None,
     prune: bool = False,
     replace_local: frozenset[str] = frozenset(),
+    agents: tuple[str, ...] = AGENTS,
 ) -> Plan:
-    """Plan every manifest target, the legacy Codex copies, and the orphan links.
+    """Plan every manifest target of the selected agents, the legacy Codex copies, and the orphan links.
 
     `prune` turns orphans into removals. Entries named in `replace_local` replace local content that
     differs from the repository instead of reporting a conflict; unsafe conflicts stay conflicts.
+    Targets of the other agents are never installed; what this tool put there becomes an orphan.
     """
     repo_root = repo_root.resolve()
     state = state or State()
     claims = _Claims(repo_root)
+    orphan_kind = PRUNE if prune else ORPHAN
     actions: list[Action] = []
     legacy: list[tuple[Entry, Path, Path]] = []
+    disabled: list[tuple[Path, str]] = []
     for entry in manifest.entries:
         for target in entry.targets:
             path = env.expand(target)
+            agent = target_agent(target)
+            if agent not in agents:
+                disabled.append((path, agent))
+                continue
             actions += _plan_target(entry, path, repo_root, claims, state, entry.id in replace_local)
             if path.parent == env.codex_skills and env.codex_legacy_skills_are_separate:
                 legacy.append((entry, repo_root / entry.sources[0], env.codex_legacy_skills / path.name))
     for entry, source, legacy_path in legacy:
         actions += _plan_legacy_copy(entry, source, legacy_path, claims, entry.id in replace_local)
-    actions += _find_orphans(repo_root, env, manifest, claims, state, PRUNE if prune else ORPHAN)
+    for path, agent in disabled:
+        actions += _plan_disabled_target(path, agent, repo_root, claims, state, orphan_kind)
+    actions += _find_orphans(repo_root, env, manifest, claims, state, orphan_kind)
     return Plan(tuple(actions))
 
 
@@ -353,6 +364,30 @@ def _compare(
     if forced:
         return action(same_kind, f"{different_detail}; {_REPLACED_LOCAL}")
     return action(CONFLICT, different_detail)
+
+
+def _plan_disabled_target(
+    target: Path, agent: str, repo_root: Path, claims: _Claims, state: State, kind: str
+) -> list[Action]:
+    """Offer to remove what this tool put at the target of a disabled agent; leave everything else alone.
+
+    A location already claimed, such as a folder shared with an enabled target, is never touched.
+    """
+    if not os.path.lexists(target) or claims.is_claimed(target) or claims.claim(target) is not None:
+        return []
+    location = claims.locations[target]
+    detail = f"agent disabled: {agent}"
+    captured, _ = _capture(target)
+    if captured is not None and captured[0] == "link":
+        if is_below(_destination(target, captured[1]), repo_root) or _is_recorded_old_link(
+            target, captured[1], state, repo_root
+        ):
+            return [_action(kind, target, None, None, detail, expected=captured, location=location)]
+        return []
+    owned = owned_generated_snapshot(target, state)
+    if owned is not None:
+        return [_action(kind, target, None, None, detail, expected=owned, location=location)]
+    return []
 
 
 def _find_orphans(
