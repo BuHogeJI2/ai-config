@@ -36,8 +36,8 @@ repository and make it yours:
 |---|---|---|
 | `commit-me` | both | Commits only when asked, with a message in the repository's own style. |
 | `planning` | both | Writes a phased implementation plan once a discussion has settled. |
-| `codex-review` | Claude | Asks Codex for an independent review, then checks each finding. |
-| `claude-review` | Codex | Asks Claude for an independent review, then checks each finding. |
+| `codex-review` | Claude | Runs Codex in the background for an independent review, then checks each finding. |
+| `claude-review` | Codex | Runs Claude in the background for an independent review, then checks each finding. |
 | `backlog` | both | Files out-of-scope findings into a repo-local backlog and checks them later. |
 | `peer-chat` | Claude, Codex | Lets Claude and Codex talk to each other in an agterm split. |
 
@@ -87,16 +87,17 @@ Some skills need more:
 
 - Claude Code and/or Codex, and both for the review and `peer-chat` skills.
 - Node.js, for the skills with scripts: `backlog`, `codex-review`, `claude-review`.
-- For `peer-chat`, and for the in-pane mode of the two review skills: the
-  [agterm](https://github.com/umputun/agterm) terminal 0.24 or newer with `agtermctl`, and `peer-chat.py`
-  on `PATH`. Without agterm the review skills run the other agent headless instead.
+- For the review skills: the other agent's CLI on `PATH`, installed and logged in (`codex` for
+  `codex-review`, `claude` for `claude-review`). The reviewer runs headless; no pane or terminal is needed.
+- For `peer-chat` only: the [agterm](https://github.com/umputun/agterm) terminal 0.24 or newer with
+  `agtermctl`, and `peer-chat.py` on `PATH`.
 
 `install` does not check these. `scripts/ai-config doctor` reports a program that a manifest entry
 requires and that is missing from `PATH`.
 
 A machine with only one agent can install for that agent alone (see
 [Install on a new machine](#install-on-a-new-machine)). This does not remove what a skill needs: the
-Codex `claude-review` skill still runs Claude, and `peer-chat` still needs a Claude pane.
+Codex `claude-review` skill still runs the `claude` CLI, and `peer-chat` still needs a Claude pane.
 
 ### Install peer-chat.py
 
