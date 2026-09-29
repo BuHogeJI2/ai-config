@@ -27,7 +27,13 @@
       "source": "claude/skills/codex-review",
       "targets": [
         "~/.claude/skills/codex-review"
-      ]
+      ],
+      "requires": {
+        "commands": [
+          "node",
+          "codex"
+        ]
+      }
     },
     {
       "id": "skill/commit-me",

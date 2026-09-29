@@ -1,7 +1,7 @@
 ---
 name: codex-review
-description: Ask OpenAI Codex for an independent read-only review of code changes, a plan, a design, or any other current work, then verify and triage its findings. Use when the user explicitly wants Codex involved — "review it with codex", "ask codex", "let codex check it", "second opinion from codex" — or runs /codex-review; do not use it for an ordinary review that Claude should do alone. In agterm it talks to the Codex the user already runs in the other pane of the split, through peer-chat.py; outside agterm it runs Codex headless. Claude neither accepts nor rejects Codex findings by default — every finding is re-checked and prioritized (P1–P4) before anything is done. Also use it when a "Chat from Codex: [codex-review] answer N ready" prompt arrives.
-argument-hint: "[--astra] [--exec] [focus text]"
+description: Ask OpenAI Codex for an independent read-only review of code changes, a plan, a design, or any other current work, then verify and triage its findings. Use when the user explicitly wants Codex involved — "review it with codex", "ask codex", "let codex check it", "second opinion from codex" — or runs /codex-review; do not use it for an ordinary review that Claude should do alone, or for a conversation with the Codex in the other pane (that is peer-chat). Codex runs headless in a read-only sandbox and nobody talks to it; Claude sends the brief, gets the answer, and re-checks and prioritizes (P1–P4) every finding before anything is done.
+argument-hint: "[--astra] [focus text]"
 ---
 
 # Codex review
@@ -13,9 +13,7 @@ on its own before deciding anything. Codex is a second opinion, not an authority
 
 `$ARGUMENTS`:
 
-- `--astra` — headless only: use `gpt-6-astra`. Default is `gpt-5.6-sol`. Effort is always `high`.
-  In agterm the model is whatever the user started in the other pane.
-- `--exec` — force the headless mode even inside agterm. Only when the user asks for it.
+- `--astra` — use `gpt-6-astra`. Default is `gpt-5.6-sol`. Effort is always `high`.
 - Any other text — an extra focus for the review, or a custom answer format. A custom format
   replaces the "Answer format" section of the brief.
 
@@ -23,58 +21,31 @@ Claude's own model does not change.
 
 ## Helper script
 
-All mechanics go through one script. Never drive `agtermctl` or `codex` by hand for this.
+All mechanics go through one script. Never run `codex` by hand for this.
 
 The script sits next to this file: set `S` to `scripts/codex-review.mjs` resolved against the folder
 this `SKILL.md` was loaded from (the skill's base directory), not against your working directory.
 
 ```bash
 S="<folder of this SKILL.md>/scripts/codex-review.mjs"
-node "$S" init [--astra] [--exec]            # prints {dir, mode, model, brief, why}
-node "$S" send <dir> <round> [--timeout s]   # agterm: sends a pointer and returns; exec: waits, prints the reply
-node "$S" answer <dir> <round>               # agterm: checks answer-<round>.md, records it, prints it
+node "$S" init [--astra]                     # prints {dir, model, brief}
+node "$S" send <dir> <round> [--timeout s]   # runs Codex, waits, saves and prints the answer
 node "$S" status <dir>                       # round states
 ```
 
-- **Mode.** `agterm` whenever Claude runs inside agterm: the user already started Codex in the other
-  pane of the split. `exec` (headless `codex exec`, hard read-only sandbox) outside agterm, or with
-  `--exec`. `init` prints `why` for exec mode; tell the user when it is anything other than "not
-  running inside agterm".
-- **Files.** `init` creates the review folder. agterm mode always uses
-  `$TMPDIR/agterm-peer-reviews/codex-reviews/<timestamp>/`: Codex must write its answer there, and its
-  sandbox may not reach the repo. macOS cleans `$TMPDIR`, so these folders are not kept for long.
-  Exec mode uses `<main repo>/.tmp/codex-reviews/<timestamp>/` when the project has a `.tmp/` folder,
-  else `~/.claude/codex-reviews/<timestamp>/`.
-  You write `round-N.md`; the script adds the round header and, in agterm, the reply instructions.
-  The answer is `answer-N.md`.
-- **Exit codes:** `0` done · `1` error → report it · `2` exec timeout → run `send` again or raise
-  `--timeout` · `3` nothing was sent and the user must act (no Codex in the other pane, a dialog is
-  open there, no split) → tell the user the exact reason and offer `--exec`. Never switch to `--exec`
-  on your own.
-- In exec mode run `send` with `run_in_background: true`; a high-effort review can take longer than
-  the Bash timeout.
-
-## How it runs in agterm
-
-- `send` types one line into Codex's composer through `peer-chat.py --queue`: an idle Codex starts at
-  once, a busy one runs it after its current turn instead of mixing it into unrelated work. The line
-  points at `round-N.md`, which carries the whole brief and the reply instructions.
-- `send` returns right away. **End your turn.** Do not poll or wait. Codex writes `answer-N.md` and
-  replies with a prompt that arrives in this pane: `Chat from Codex: [codex-review] answer N ready:
-  <path>`. Then run `answer <dir> N` and triage.
-- If `send` says delivery is unknown, tell the user the exact error and ask them to look at the Codex
-  pane. Never re-send blind.
-- If the user asks about a missing reply, run `status <dir>` and check whether `answer-N.md` exists.
-  Report what you can verify; if there is an answer, continue with the `answer` step; if not, ask the
-  user to look at the Codex pane. Never re-send a `sent` or unknown round.
-- The pane is the user's. Its Codex should be dedicated to this pair; if the user is using it for other
-  work, ask before starting a review.
-- **Read-only is only an instruction here.** The user's Codex runs with its own sandbox, usually
-  workspace-write. The brief tells it to stay read-only, but nothing enforces it. When the repository
-  must be protected for sure, suggest `--exec`.
-
-[references/agterm-mechanics.md](references/agterm-mechanics.md) has the details for debugging or
-changing the script.
+- **How it runs.** `send` runs `codex exec` headless: a read-only sandbox, no approval prompts, and no
+  user config, rules, plugins, app tools or hooks. The user does not see or talk to this Codex. Later
+  rounds resume the same Codex thread, so it remembers the earlier rounds.
+- **Files.** `init` creates the review folder: `<main repo>/.tmp/codex-reviews/<timestamp>-<id>/` when
+  the project has a `.tmp/` folder, else `~/.claude/codex-reviews/<timestamp>-<id>/`. You write
+  `round-N.md`; the script adds the round header. The answer is `answer-N.md`.
+- **Run `send` with `run_in_background: true`.** A high-effort review can take longer than the Bash
+  timeout. Wait for the background task to finish; do not start `send` again for the same round.
+- **Exit codes:** `0` done · `1` error → report it; the round is cleared and can run again after the
+  cause is fixed · `2` timeout → run `send` again or raise `--timeout` (default 45 minutes).
+- A failed run, an empty answer or a run with no Codex thread is an error, never "No findings".
+- `send` refuses a round that was started and never finished (the helper was killed). Check that no
+  `send` for it is still running, then start a new review with `init`.
 
 ## Step 1 — Build the brief
 
@@ -92,8 +63,8 @@ fill every section:
 
 ## Step 2 — Round 1
 
-Run `init`, write the brief, run `send <dir> 1`. Tell the user in one line where Codex runs (the other
-pane, or headless with which model).
+Run `init`, write the brief, run `send <dir> 1` in the background. Tell the user in one line that
+Codex reviews headless, with which model.
 
 ## Step 3 — Triage
 
@@ -139,5 +110,3 @@ and any unresolved disputes with both sides' arguments. Mention the review folde
 Then **stop and wait for "go"**. Do not change code or file backlog items before it. The only
 exception: the user asked in the same request to implement the results after the review — then
 continue with the accepted items and the backlog filing.
-
-Codex stays open in its pane; the user closes it when they want.

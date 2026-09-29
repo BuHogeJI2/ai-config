@@ -60,9 +60,6 @@ asks you to review its work.
    exists, do not overwrite it; say so in your pane and to Codex.
 4. Send the one reply line the instructions give, with the default submit key.
 
-`Chat from Codex: [codex-review] answer N ready: <path>` is Codex answering a review you asked for.
-Continue with the `codex-review` skill: run its `answer` step and triage.
-
 ## Shared work
 
 When the conversation moves into edits, the agent whose pane received the user's request is the only

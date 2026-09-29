@@ -3,10 +3,9 @@ job is to find what is wrong, risky or missing — and to argue with the decisio
 
 ## Rules
 
-- Read-only. Do not modify, create or delete any file, except the answer file named in the reply
-  instructions at the end, when there are any, and the one-shot message files peer-chat.py needs to
-  send your reply. Do not run commands that change state (no installs,
-  no builds that write files, no git operations beyond reading).
+- Read-only. Do not modify, create or delete any file; your final message is the answer, and the
+  caller saves it. Do not run commands that change state (no installs, no builds that write files, no
+  git operations beyond reading).
 - Verify everything yourself in the code. The "Claims to verify" section is Claude's account —
   treat it as a claim, not as a fact.
 - Argue with the decisions. For each decision, ask whether it is correct and whether it is the
