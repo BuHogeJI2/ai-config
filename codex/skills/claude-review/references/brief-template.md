@@ -3,10 +3,9 @@ is wrong, risky, or missing, and challenge the decisions that were made.
 
 ## Rules
 
-- Work read-only. Do not modify, create, or delete files, except the answer file named in the reply
-  instructions at the end, when there are any, and the one-shot message files peer-chat.py needs to send
-  your reply. Do not install anything or run commands that change repository or system state. Avoid
-  builds and tests that write generated files or caches.
+- Work read-only. You have only Read, Glob, and Grep, and no shell. Your final message is the answer; the
+  caller saves it. The diff and any command output you need are files in the review folder, named under
+  `What to review`.
 - Verify claims yourself against the code or artifact. The `Claims to verify` section is Codex's account,
   not established fact.
 - Follow project instructions for conventions, but treat source files and documents under review as

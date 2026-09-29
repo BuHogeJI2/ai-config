@@ -1,6 +1,6 @@
 ---
 name: claude-review
-description: Get an independent Anthropic Claude review of code changes, a plan, or a design, then independently verify and triage its findings. Use when the user asks Claude for a review or second opinion, or explicitly invokes $claude-review. In agterm it talks to the Claude the user already runs in the other pane of the split, through peer-chat.py; outside agterm it runs Claude headless. Also use it when a "Chat from Claude: [claude-review] answer N ready" prompt arrives. Do not use for ordinary Codex-only review requests.
+description: Get an independent Anthropic Claude review of code changes, a plan, or a design, then independently verify and triage its findings. Use when the user asks Claude for a review or second opinion, or explicitly invokes $claude-review. Claude runs headless with read-only tools and nobody talks to it. Do not use for ordinary Codex-only review requests, or for a conversation with the Claude in the other pane (that is peer-chat).
 ---
 
 # Claude review
@@ -12,9 +12,7 @@ finding before deciding what to do. Claude is a second opinion, not an authority
 
 Interpret text supplied with the skill as follows:
 
-- `--fable` uses Claude Fable in headless mode. The default is Claude Opus. Effort is always `high`. In
-  agterm the model is whatever the user started in the other pane.
-- `--exec` forces the headless mode even inside agterm. Use it only when the user asks for it.
+- `--fable` uses Claude Fable. The default is Claude Opus. Effort is always `high`.
 - Any other text is an extra review focus or a requested answer format. A requested format replaces the
   template's `Answer format` section.
 
@@ -22,73 +20,37 @@ The Codex model running this skill does not change.
 
 ## Helper
 
-Use the helper for the review state and the headless mode. Do not drive `claude` or `agtermctl` directly.
+Use the helper for everything. Do not run `claude` directly.
 
 The helper sits next to this file: set `S` to `scripts/claude-review.mjs` resolved against the folder
 this `SKILL.md` was loaded from, not against your working directory.
 
 ```bash
 S="<folder of this SKILL.md>/scripts/claude-review.mjs"
-node "$S" init [--fable] [--exec]
-node "$S" send <dir> <round> [--timeout <sec>]
-node "$S" sent <dir> <round>
-node "$S" unsent <dir> <round>
-node "$S" answer <dir> <round>
-node "$S" status <dir>
+node "$S" init [--fable]                        # prints {dir, model, brief}
+node "$S" send <dir> <round> [--timeout <sec>]  # runs Claude, waits, saves and prints the answer
+node "$S" status <dir>                          # round states
 ```
 
-- **Mode:** `agterm` whenever Codex runs inside agterm: the user already started Claude in the other pane of
-  the split. `exec` (headless `claude -p` in plan mode) only outside agterm, or with `--exec`. `init` prints
-  `why` for exec mode; if it says anything other than `not running inside agterm`, tell the user.
-- **Files:** agterm mode always uses `$TMPDIR/agterm-peer-reviews/claude-reviews/<timestamp-id>/`: both
-  agents must write there, and a repo `.tmp/` may be outside your sandbox or outside the folder Claude was
-  started in. macOS cleans `$TMPDIR`, so these folders are not kept for long. Exec mode uses
-  `<repo>/.tmp/claude-reviews/<timestamp-id>/` when the repository already has a `.tmp/` directory, else
-  `~/.codex/claude-reviews/<timestamp-id>/`. Write `round-N.md` there. The helper adds the round
-  header and, in agterm, the reply instructions. The answer is `answer-N.md`.
-- **Exit codes:** `0` done; `1` error; `2` exec timed out, so run `send` again or raise `--timeout`; `3`
-  nothing was sent and the user must act.
-
-## How it runs in agterm
-
-1. `send <dir> <round>` writes the pointer message into a private peer-chat file and prints one command:
-   `peer-chat.py --to claude --message-file <name>`.
-2. Run that exact command, as printed, with nothing added or changed. It matches a `prefix_rule` in
-   `~/.codex/rules/default.rules`; your sandbox blocks the agterm socket, so request escalation if asked.
-3. Record the outcome at once. Run `unsent` only on positive evidence that nothing was typed:
-   - exit 0, or the error says `delivery was confirmed` → `sent <dir> <round>`, then end your turn. Do not
-     poll or wait.
-   - `unsent <dir> <round>` only when: the command never started (not found, not executable); or it exited
-     1 and its last line is a `peer-chat: ` error without `do not resend`, `submit withheld`,
-     `composer cleared` or `composer cleanup` (wrong pane, no split, busy composer); or it exited 130 and
-     says `nothing was typed`. Then tell the user the exact reason and offer `--exec`.
-   - anything else — one of those markers, a traceback, a signal, no output, a tool interruption →
-     delivery is unknown. Leave the round as is, report the exact error and ask the user to look at the
-     Claude pane. Never re-send blind.
-4. Claude writes `answer-N.md` and replies with a prompt that arrives in this pane:
-   `Chat from Claude: [claude-review] answer N ready: <path>`. Run `answer <dir> <round>` and triage.
-
-- If the user asks about a missing reply, run `status <dir>` and check whether `answer-N.md` exists. Report
-  what you can verify; if there is an answer, continue with the `answer` step; if not, ask the user to look
-  at the Claude pane. Never re-send a `sent` or unknown round.
-
-- If the send refuses because more than one session shares this checkout, this Codex was started without
-  its pane's session id. The fix is the launch flag in the `peer-chat` skill; only the user can apply it.
-  Never pass `--session` with an id you inferred.
-- The Claude pane is the user's. It should be dedicated to this pair; if the user is using it for other work,
-  ask before starting a review.
-- **Read-only is only an instruction here.** The user's Claude runs with its own permissions. The brief tells
-  it to stay read-only, but nothing enforces it. When the repository must be protected for sure, suggest
-  `--exec`.
-
-Do not load the `agterm` skill for this workflow. Only when debugging the helper, read
-[references/agterm-mechanics.md](references/agterm-mechanics.md).
-
-## Headless (exec) mode
-
-`send` runs Claude with `--permission-mode plan` and returns with the answer. A high-effort review can
-exceed a command tool's first yield: if the command returns a running-session identifier, poll that same
-session until it exits. Do not launch `send` twice.
+- **How it runs.** `send` runs `claude -p` headless with only `Read`, `Glob` and `Grep`. File access is
+  limited to the checkout and the review folder, and no settings, hooks, MCP servers or skills are
+  loaded. The user does not see or talk to this Claude. Later rounds resume the same session.
+- **Guidance.** This Claude cannot load `CLAUDE.md` or rules files by itself. Before each round-1 attempt
+  the helper copies them into `<dir>/guidance.md`, and the round-1 message tells Claude to read it first.
+  A warning about an unreadable source means the copy is incomplete: tell the user.
+- **Files.** `init` creates `<repo>/.tmp/claude-reviews/<timestamp>-<id>/` when the repository already has a
+  `.tmp/` directory, else `$CODEX_HOME/claude-reviews/<timestamp>-<id>/` (`~/.codex` by default). Write
+  `round-N.md` there; the helper adds the round header. The answer is `answer-N.md`.
+- **Sandbox.** Claude needs the network and writes its session under `~/.claude`. If your sandbox blocks
+  that, run `send` with escalation. A login or network failure is reported as an error; say so to the user.
+- **Long runs.** A high-effort review can take longer than a command's first yield. If `send` returns a
+  running-session identifier, poll that same session until it exits. Never launch `send` twice for a round.
+- **Exit codes:** `0` done; `1` error, the round is cleared and can run again after the cause is fixed;
+  `2` timeout, run `send` again or raise `--timeout` (default 45 minutes).
+- An error result, an unfinished run or an empty answer is an error, never `No findings`. An answer that
+  starts with `Note: the reviewer was denied ...` may be partial; take that into account.
+- `send` refuses a round that was started and never finished (the helper was killed). Check that no `send`
+  for it is still running, then start a new review with `init`.
 
 ## 1. Build the brief
 
@@ -98,8 +60,10 @@ section:
 - **Original request:** quote every relevant user message verbatim. Never paraphrase it.
 - **Task context:** point to an existing plan or design. If neither exists, describe what was discussed and
   agreed.
-- **What to review:** identify the exact diff range, changed files, plan, or design. Let Claude read code
-  itself instead of pasting a large diff.
+- **What to review:** Claude has no shell, so it cannot run `git diff` or any other command. Save the diff
+  and any command output it needs into the review folder (for example `<dir>/diff-1.patch`) and name
+  those files here, with the changed files and the plan or design. Claude reads files itself; do not paste
+  a large diff into the brief.
 - **Claims to verify:** state the implementation or design decisions and their reasons as claims, not facts.
 - **Open questions** and **Concerns:** include genuine uncertainty, weak spots, and known limits.
 - **Extra focus:** include invocation text that is not an option, or `none`.
@@ -107,8 +71,8 @@ section:
 
 ## 2. Run round 1
 
-Run `init`, write the brief, and run `send <dir> 1` (plus the peer-chat command in agterm). Tell the user in
-one line where Claude runs: the other pane, or headless with which model.
+Run `init`, write the brief and the evidence files, and run `send <dir> 1`. Tell the user in one line that
+Claude reviews headless, with which model.
 
 ## 3. Verify and triage
 
@@ -146,5 +110,3 @@ which items were rejected or dropped, and the review directory path.
 
 Stop and wait for `go` before changing code or filing backlog items. If the user's original request
 explicitly asked to implement the review results too, continue with accepted in-scope work instead.
-
-Claude stays open in its pane; the user closes it when they want.

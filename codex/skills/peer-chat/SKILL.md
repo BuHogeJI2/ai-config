@@ -62,11 +62,6 @@ A message that asks a question or reports a result that needs attention gets a r
 `peer-chat.py` in the same turn. Text written only in this pane does not reach Claude. Closing
 acknowledgements, "nothing further" and confirmations of finished work end the exchange without a reply.
 
-## Review answers from Claude
-
-`Chat from Claude: [claude-review] answer N ready: <path>` is Claude answering a review you asked for.
-Continue with the `claude-review` skill: run its `answer` step and triage.
-
 ## Shared work
 
 When the conversation moves into edits, the agent whose pane received the user's request is the only

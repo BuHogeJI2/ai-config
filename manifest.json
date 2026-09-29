@@ -19,7 +19,13 @@
       "source": "codex/skills/claude-review",
       "targets": [
         "~/.agents/skills/claude-review"
-      ]
+      ],
+      "requires": {
+        "commands": [
+          "node",
+          "claude"
+        ]
+      }
     },
     {
       "id": "skill/codex-review",
