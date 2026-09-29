@@ -10,7 +10,7 @@ from typing import Mapping, Sequence, TextIO
 from .doctor import ERROR, LEVELS, WARNING, run_doctor
 from .fileops import TargetChangedError
 from .adopt import AdoptError, adopt
-from .agents import AGENTS
+from .agents import AGENTS, DEFAULT, SAVED, AgentsError, effective_agents, parse_agents, target_agent
 from .backups import list_backups
 from .compose import ComposeError, compose
 from .installer import apply_plan
@@ -18,7 +18,7 @@ from .manifest import OWNERS, Entry, Manifest, ManifestError, load_manifest
 from .paths import REPO_ROOT, Environment
 from .planner import CONFLICT, CREATE, RELINK, Plan, build_plan, link_destination
 from .restore import RestoreError, restore_backup
-from .state import StateError, exclusive_lock, load_state
+from .state import State, StateError, exclusive_lock, load_state, save_state
 from .trees import TreeError, describe_differences, read_regular_file
 from .uninstall import uninstall
 
@@ -31,8 +31,11 @@ def main(
 ) -> int:
     parser = argparse.ArgumentParser(prog="ai-config")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("doctor", help="report problems without changing anything")
+    agents_help = "agents to use: codex, claude, or codex,claude (install saves the choice for this machine)"
+    doctor = commands.add_parser("doctor", help="report problems without changing anything")
+    doctor.add_argument("--agents", help=agents_help)
     install = commands.add_parser("install", help="link and generate managed files")
+    install.add_argument("--agents", help=agents_help)
     install.add_argument("--dry-run", action="store_true", help="print the plan without changing anything")
     install.add_argument("--prune", action="store_true", help="remove links into this repository that have no manifest entry")
     install.add_argument(
@@ -44,6 +47,7 @@ def main(
     )
     diff = commands.add_parser("diff", help="show how a local target differs from the repository")
     diff.add_argument("id", help="manifest entry id")
+    diff.add_argument("--agents", help=agents_help)
     adopt_command = commands.add_parser("adopt", help="copy a local skill into the repository and add its manifest entry")
     adopt_command.add_argument("--agent", required=True, choices=AGENTS, help="the agent whose local skill is copied")
     adopt_command.add_argument("--skill", required=True, help="skill folder name")
@@ -59,8 +63,15 @@ def main(
     env = Environment.from_env(os.environ if environ is None else environ)
     repo_root = (repo_root or REPO_ROOT).resolve()
     out = out or sys.stdout
+    flag = None
+    if getattr(args, "agents", None) is not None:
+        try:
+            flag = parse_agents(args.agents)
+        except AgentsError as error:
+            print(f"error    {error}", file=out)
+            return 1
     if args.command == "doctor":
-        return _doctor(repo_root, env, out)
+        return _doctor(repo_root, env, out, flag)
     if args.command == "restore":
         return _restore(args.backup_id, repo_root, env, out)
     if args.command == "uninstall":
@@ -80,20 +91,40 @@ def main(
             print(f"error    --replace-local: no manifest entry {', '.join(unknown)}", file=out)
             return 1
         options = {"prune": args.prune, "replace_local": frozenset(args.replace_local)}
-        return _install(manifest, repo_root, env, out, args.dry_run, options)
-    return _diff(args.id, manifest, repo_root, env, out)
+        return _install(manifest, repo_root, env, out, args.dry_run, options, flag)
+    return _diff(args.id, manifest, repo_root, env, out, flag)
 
 
-def _install(manifest: Manifest, repo_root: Path, env: Environment, out: TextIO, dry_run: bool, options: dict) -> int:
+def _install(
+    manifest: Manifest,
+    repo_root: Path,
+    env: Environment,
+    out: TextIO,
+    dry_run: bool,
+    options: dict,
+    flag: tuple[str, ...] | None,
+) -> int:
+    """Install for the selected agents. A real install saves `--agents` once the plan has no conflicts,
+    before any change, so a failed install is retried with the same choice."""
     try:
         if dry_run:
-            plan = build_plan(repo_root, env, manifest, load_state(env.state_dir), **options)
+            state = load_state(env.state_dir)
+            agents = _print_agents(flag, state, out)
+            if _inactive_replace_local(manifest, options["replace_local"], agents, out):
+                return 1
+            plan = build_plan(repo_root, env, manifest, state, agents=agents, **options)
             return _print_plan(plan, repo_root, env, out)
         with exclusive_lock(env.state_dir):
             state = load_state(env.state_dir)
-            plan = build_plan(repo_root, env, manifest, state, **options)
+            agents = _print_agents(flag, state, out)
+            if _inactive_replace_local(manifest, options["replace_local"], agents, out):
+                return 1
+            plan = build_plan(repo_root, env, manifest, state, agents=agents, **options)
             if _print_plan(plan, repo_root, env, out):
                 return 1
+            if flag is not None:
+                state.agents = flag
+                save_state(env.state_dir, state)
             backups = apply_plan(plan, repo_root, state, env.state_dir)
     except (StateError, TargetChangedError, TreeError) as error:
         print(f"error    {error}", file=out)
@@ -101,7 +132,28 @@ def _install(manifest: Manifest, repo_root: Path, env: Environment, out: TextIO,
     for backup in backups:
         print(f"backup         {env.shorten(backup.target)}: {backup.id}", file=out)
     print(f"Applied {len(plan.changes)} change(s).", file=out)
+    if flag is not None:
+        print(f"Saved agents: {','.join(flag)}. A plain install uses them from now on.", file=out)
     return 0
+
+
+def _print_agents(flag: tuple[str, ...] | None, state: State, out: TextIO) -> tuple[str, ...]:
+    """Return the agents to use, and name them unless no choice was ever made, so old output stays the same."""
+    agents, source = effective_agents(flag, state.agents)
+    if source != DEFAULT:
+        print(f"{'agents':<14} {','.join(agents)} ({'saved' if source == SAVED else '--agents'})", file=out)
+    return agents
+
+
+def _active(entry: Entry, agents: tuple[str, ...]) -> bool:
+    return any(target_agent(target) in agents for target in entry.targets)
+
+
+def _inactive_replace_local(manifest: Manifest, ids: frozenset[str], agents: tuple[str, ...], out: TextIO) -> bool:
+    inactive = sorted(entry.id for entry in manifest.entries if entry.id in ids and not _active(entry, agents))
+    if inactive:
+        print(f"error    --replace-local: {', '.join(inactive)} has no target for the agents {','.join(agents)}", file=out)
+    return bool(inactive)
 
 
 def _adopt(args: argparse.Namespace, repo_root: Path, env: Environment, out: TextIO) -> int:
@@ -151,8 +203,13 @@ def _uninstall(repo_root: Path, env: Environment, out: TextIO) -> int:
     return 1 if result.kept else 0
 
 
-def _doctor(repo_root: Path, env: Environment, out: TextIO) -> int:
-    findings = sorted(run_doctor(repo_root, env), key=lambda finding: LEVELS.index(finding.level))
+def _doctor(repo_root: Path, env: Environment, out: TextIO, flag: tuple[str, ...] | None) -> int:
+    try:
+        state = load_state(env.state_dir)
+    except StateError:
+        state = State()
+    agents = _print_agents(flag, state, out)
+    findings = sorted(run_doctor(repo_root, env, agents), key=lambda finding: LEVELS.index(finding.level))
     for finding in findings:
         print(f"{finding.level:<8} {finding.message}", file=out)
     errors = sum(finding.level == ERROR for finding in findings)
@@ -181,17 +238,28 @@ def _print_plan(plan: Plan, repo_root: Path, env: Environment, out: TextIO) -> i
     return 0
 
 
-def _diff(entry_id: str, manifest: Manifest, repo_root: Path, env: Environment, out: TextIO) -> int:
+def _diff(
+    entry_id: str, manifest: Manifest, repo_root: Path, env: Environment, out: TextIO, flag: tuple[str, ...] | None
+) -> int:
     entry = next((entry for entry in manifest.entries if entry.id == entry_id), None)
     if entry is None:
         print(f"error    no manifest entry '{entry_id}'", file=out)
         return 1
+    try:
+        state = load_state(env.state_dir)
+    except StateError as error:
+        print(f"error    {error}", file=out)
+        return 1
+    agents = _print_agents(flag, state, out)
+    if not _active(entry, agents):
+        print(f"{entry_id}: inactive, it has no target for the agents {','.join(agents)}; compare with --agents", file=out)
+        return 0
     if entry.method == "compose":
-        return _diff_generated(entry, repo_root, env, out)
+        return _diff_generated(entry, repo_root, env, out, agents)
 
     source = repo_root / entry.sources[0]
     source_label = entry.sources[0]
-    for target in _diff_targets(entry, env):
+    for target in _diff_targets(entry, env, agents):
         shown = env.shorten(target)
         if target.is_symlink() and link_destination(target) == source:
             print(f"{shown}: linked to {source_label}", file=out)
@@ -211,13 +279,13 @@ def _diff(entry_id: str, manifest: Manifest, repo_root: Path, env: Environment, 
     return 0
 
 
-def _diff_generated(entry: Entry, repo_root: Path, env: Environment, out: TextIO) -> int:
+def _diff_generated(entry: Entry, repo_root: Path, env: Environment, out: TextIO, agents: tuple[str, ...]) -> int:
     try:
         output = compose(repo_root, entry.sources).output
     except ComposeError as error:
         print(f"error    {error}", file=out)
         return 1
-    for target in (env.expand(target) for target in entry.targets):
+    for target in (env.expand(target) for target in entry.targets if target_agent(target) in agents):
         shown = env.shorten(target)
         if target.is_symlink():
             print(f"{shown}: link to {link_destination(target)}", file=out)
@@ -242,8 +310,8 @@ def _diff_generated(entry: Entry, repo_root: Path, env: Environment, out: TextIO
     return 0
 
 
-def _diff_targets(entry: Entry, env: Environment) -> list[Path]:
-    targets = [env.expand(target) for target in entry.targets]
+def _diff_targets(entry: Entry, env: Environment, agents: tuple[str, ...]) -> list[Path]:
+    targets = [env.expand(target) for target in entry.targets if target_agent(target) in agents]
     if not env.codex_legacy_skills_are_separate:
         return targets
     legacy = [env.codex_legacy_skills / target.name for target in targets if target.parent == env.codex_skills]

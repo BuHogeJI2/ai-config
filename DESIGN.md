@@ -220,22 +220,45 @@ Example:
 The tool keeps its state outside the repository in `$XDG_STATE_HOME/ai-config/` (default `~/.local/state/ai-config/`):
 
 ```text
-state.json   repository root, links created by the tool, generated-file hashes
+state.json   repository root, links created by the tool, generated-file hashes, selected agents
 lock         held while install, uninstall, or restore runs
 backups/     see Backups
 ```
 
 Because the state file records the repository root, `doctor` detects a moved checkout, and `install` can relink the affected links: they are provably owned by this repository.
 
+### Selected agents
+
+A machine may have only one of the agents. `install --agents codex`, `--agents claude`, or
+`--agents codex,claude` names the complete set of agents to install for, and saves it in `state.json` as
+an `agents` array. Later commands use the saved set. Without a saved set, both agents are used, so a
+machine that never chose keeps working as before and prints no selection line.
+
+- The agent of a target is read from the manifest target before it is expanded: `~/.claude/` is Claude,
+  `~/.agents/` and `~/.codex/` are Codex. `CODEX_HOME` can point anywhere, so the expanded path cannot tell.
+- The choice is saved only by a real install, under the lock, after the plan has no conflicts and before
+  any change. A failed install is retried with the same choice. A dry run, an invalid value, or a plan
+  with conflicts saves nothing.
+- `doctor --agents` and `diff --agents` use a set for one run without saving it, to check a choice first.
+- The manifest stays complete. `doctor` validates the whole repository for both agents, but checks the
+  machine (local skills, required commands and MCP servers, the install plan) only for the selected ones.
+  Local-skill discovery and the MCP configuration of the other agents are never read. What the tool
+  created for them is still inspected, for state warnings and for cleanup.
+- `--replace-local` for an entry with no target of a selected agent is an error. `diff` of such an entry
+  says it is inactive.
+- `restore` and `uninstall` ignore the selection and keep it.
+
+The selection is not dependency trimming: a Codex skill that calls Claude still needs Claude.
+
 ## Management tool
 
 One `scripts/ai-config` program provides all behavior through subcommands:
 
 ```text
-scripts/ai-config doctor
-scripts/ai-config diff <id>
+scripts/ai-config doctor [--agents <agents>]
+scripts/ai-config diff <id> [--agents <agents>]
 scripts/ai-config install --dry-run
-scripts/ai-config install [--prune] [--replace-local <id>]
+scripts/ai-config install [--agents <agents>] [--prune] [--replace-local <id>]
 scripts/ai-config adopt --agent <agent> --skill <name> --to <owner> [--replace-repo]
 scripts/ai-config uninstall
 scripts/ai-config restore <backup-id>
@@ -245,7 +268,7 @@ It is written in Python 3.9 or later using only the standard library, so it runs
 
 ### Installation behavior
 
-Installation is planned first and applied second. The planner builds the full list of actions for every entry. If any action is a conflict, nothing is applied and the command exits with an error. `--dry-run` prints the same plan.
+Installation is planned first and applied second. The planner builds the full list of actions for every target of the [selected agents](#selected-agents). If any action is a conflict, nothing is applied and the command exits with an error. `--dry-run` prints the same plan.
 
 For each target, the planner chooses one action:
 
@@ -259,8 +282,9 @@ For each target, the planner chooses one action:
 8. Any other broken link, or a link that points outside this repository: conflict.
 9. Link points into this repository but has no manifest entry (a removed or renamed skill): reported as a managed orphan and removed only with `--prune`.
 10. Local content with no repository entry: reported as unmanaged and never changed.
+11. Target of an agent that is not selected: never created, relinked, or regenerated. A link into this repository (or into a recorded old checkout) and an unedited generated file there are orphans with the reason "agent disabled", removed only with `--prune`. Anything else there is left alone. A location that an enabled target also uses is never removed.
 
-For Codex targets, the planner also adds the action for the legacy copy in `~/.codex/skills` (see [Legacy Codex location](#legacy-codex-location)).
+For Codex targets, when Codex is selected, the planner also adds the action for the legacy copy in `~/.codex/skills` (see [Legacy Codex location](#legacy-codex-location)).
 
 Two entries are identical when they contain the same relative paths, the same file contents, and the same executable bits. `.DS_Store` files are ignored. Nested symlinks are compared by their link text.
 
@@ -296,6 +320,7 @@ Every replaced or removed local entry is backed up under `backups/<backup-id>/` 
 - The backup directory is created with mode `0700` and backup files with mode `0600`, whatever the source mode was. Original modes are recorded in the backup metadata.
 - The last 5 backups of each target are kept. Older ones are removed after a successful install.
 - `restore <backup-id>` puts the backup back and restores the original modes. If the target is a managed link, restore replaces it. If the target is ordinary local content that differs from the backup, restore reports a conflict.
+- Restore drops the tool's record of the target. A restored ordinary copy is therefore unmanaged, and `--prune` never removes it; only a restored link into this repository can be an orphan again.
 
 ## Configuration management
 

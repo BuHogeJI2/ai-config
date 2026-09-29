@@ -1,9 +1,12 @@
 import io
 import os
 import stat
+from unittest import mock
 
-from ai_config.state import exclusive_lock
+from ai_config.fileops import TargetChangedError
+from ai_config.state import exclusive_lock, load_state
 
+import ai_config.cli as cli_module
 from ai_config.cli import main
 from tests.helpers import FakeWorldTestCase, skill_entry
 
@@ -154,3 +157,120 @@ class DiffTest(FakeWorldTestCase):
 
     def test_unknown_entry(self):
         self.assertEqual(self.run_cli("diff", "nope"), (1, ["error    no manifest entry 'nope'"]))
+
+
+class AgentsOptionTest(FakeWorldTestCase):
+    run_cli = InstallDryRunTest.run_cli
+
+    def setUp(self):
+        super().setUp()
+        self.shared = self.add_skill(self.repo / "shared/skills", "plan")
+        self.review = self.add_skill(self.repo / "claude/skills", "review")
+        self.write_manifest([skill_entry("shared", "plan"), skill_entry("claude", "review")])
+
+    def saved(self):
+        return load_state(self.env.state_dir).agents
+
+    def test_install_for_codex_only_saves_the_choice(self):
+        code, lines = self.run_cli("install", "--agents", "codex")
+        self.assertEqual(code, 0)
+        self.assertEqual(lines[0], "agents         codex (--agents)")
+        self.assertEqual(lines[-1], "Saved agents: codex. A plain install uses them from now on.")
+        self.assertFalse(os.path.lexists(self.env.claude_home))
+        self.assertEqual(self.saved(), ("codex",))
+        self.assertEqual(
+            self.run_cli("install"),
+            (0, ["agents         codex (saved)", "ok             ~/.agents/skills/plan", "Nothing to change.", "Applied 0 change(s)."]),
+        )
+
+    def test_old_state_without_a_choice_installs_both(self):
+        self.run_cli("install")
+        self.assertIsNone(self.saved())
+        self.assertTrue((self.env.claude_skills / "review").is_symlink())
+
+    def test_dry_run_doctor_and_diff_do_not_save(self):
+        self.assertEqual(self.run_cli("install", "--dry-run", "--agents", "codex")[1][0], "agents         codex (--agents)")
+        self.assertEqual(self.run_cli("doctor", "--agents", "codex")[1][0], "agents         codex (--agents)")
+        self.run_cli("diff", "skill/plan", "--agents", "codex")
+        self.assertFalse(os.path.exists(self.env.state_dir / "state.json"))
+
+    def test_invalid_value_is_an_error(self):
+        for value in ("gemini", "", "codex,codex"):
+            with self.subTest(value=value):
+                code, lines = self.run_cli("install", "--agents", value)
+                self.assertEqual(code, 1)
+                self.assertTrue(lines[0].startswith("error    --agents"), lines)
+        self.assertFalse(os.path.exists(self.env.state_dir / "state.json"))
+
+    def test_conflicting_plan_does_not_save(self):
+        self.add_skill(self.env.codex_skills, "plan", description="Local edit.")
+        self.assertEqual(self.run_cli("install", "--agents", "codex")[0], 1)
+        self.assertFalse(os.path.exists(self.env.state_dir / "state.json"))
+
+    def test_failed_install_keeps_the_choice_for_the_retry(self):
+        with mock.patch("ai_config.cli.apply_plan", side_effect=TargetChangedError("changed")):
+            self.assertEqual(self.run_cli("install", "--agents", "codex")[0], 1)
+        self.assertEqual(self.saved(), ("codex",))
+
+    def test_replace_local_of_an_inactive_entry_is_an_error(self):
+        code, lines = self.run_cli("install", "--agents", "codex", "--replace-local", "skill/review")
+        self.assertEqual(code, 1)
+        self.assertEqual(lines[-1], "error    --replace-local: skill/review has no target for the agents codex")
+        self.assertFalse(os.path.exists(self.env.state_dir / "state.json"))
+
+    def test_diff_shows_only_selected_targets_and_names_inactive_entries(self):
+        self.run_cli("install", "--agents", "codex")
+        self.assertEqual(
+            self.run_cli("diff", "skill/plan"),
+            (0, ["agents         codex (saved)", "~/.agents/skills/plan: linked to shared/skills/plan"]),
+        )
+        self.assertEqual(
+            self.run_cli("diff", "skill/review")[1][-1],
+            "skill/review: inactive, it has no target for the agents codex; compare with --agents",
+        )
+        self.assertEqual(self.run_cli("diff", "skill/review", "--agents", "claude")[1][-1], "~/.claude/skills/review: missing")
+
+    def test_diff_of_a_mixed_agent_compose_entry_reads_only_selected_targets(self):
+        self.write(self.repo / "shared/instructions.md", "Shared rule.\n")
+        entry = {
+            "id": "instructions/both",
+            "method": "compose",
+            "sources": ["shared/instructions.md"],
+            "targets": ["~/.codex/AGENTS.md", "~/.claude/CLAUDE.md"],
+        }
+        self.write_manifest([entry])
+        self.write(self.env.claude_home / "CLAUDE.md", "Private Claude text.\n")
+        for argv in (("diff", "instructions/both", "--agents", "codex"), ("diff", "instructions/both")):
+            with self.subTest(argv=argv):
+                if argv[-1] == "instructions/both":
+                    self.run_cli("install", "--agents", "codex")
+                with mock.patch("ai_config.cli.read_regular_file", wraps=cli_module.read_regular_file) as read:
+                    code, lines = self.run_cli(*argv)
+                self.assertEqual(code, 0)
+                self.assertFalse(any("CLAUDE.md" in line or "Private" in line for line in lines), lines)
+                self.assertNotIn(self.env.claude_home / "CLAUDE.md", [call.args[0] for call in read.call_args_list])
+
+    def backups(self):
+        """Backup ids by (kind, target) from the restore listing."""
+        return {(line.split()[1], line.split()[2]): line.split()[0] for line in self.run_cli("restore")[1]}
+
+    def test_restore_and_uninstall_keep_the_choice(self):
+        self.add_skill(self.env.codex_skills, "plan")
+        self.run_cli("install", "--agents", "codex")
+        self.assertEqual(self.run_cli("restore", self.backups()[("dir", "~/.agents/skills/plan")])[0], 0)
+        self.assertEqual(self.saved(), ("codex",))
+        self.run_cli("uninstall")
+        self.assertEqual(self.saved(), ("codex",))
+
+    def test_prune_removes_a_restored_repository_link_but_not_a_restored_copy(self):
+        self.add_skill(self.env.claude_skills, "review")
+        self.run_cli("install")
+        self.run_cli("install", "--agents", "codex", "--prune")
+        self.assertFalse(os.path.lexists(self.env.claude_skills / "review"))
+        backups = self.backups()
+        self.assertEqual(self.run_cli("restore", backups[("dir", "~/.claude/skills/review")])[0], 0)
+        self.assertEqual(self.run_cli("restore", backups[("link", "~/.claude/skills/plan")])[0], 0)
+        self.assertFalse((self.env.claude_skills / "review").is_symlink())
+        lines = self.run_cli("install", "--dry-run", "--prune")[1]
+        self.assertIn("prune          ~/.claude/skills/plan: agent disabled: claude", lines)
+        self.assertFalse(any("~/.claude/skills/review" in line for line in lines), lines)
