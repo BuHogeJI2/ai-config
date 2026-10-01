@@ -40,6 +40,7 @@ repository and make it yours:
 | `claude-review` | Codex | Runs Claude in the background for an independent review, then checks each finding. |
 | `backlog` | both | Files out-of-scope findings into a repo-local backlog and checks them later. |
 | `peer-chat` | Claude, Codex | Lets Claude and Codex talk to each other in an agterm split. |
+| `agdoc` | Claude | Builds an HTML page about the current issue, PR, plan or topic and shows it in agterm. |
 
 `peer-chat` has one copy per agent, because each copy describes its own side of the chat.
 
@@ -91,6 +92,8 @@ Some skills need more:
   `codex-review`, `claude` for `claude-review`). The reviewer runs headless; no pane or terminal is needed.
 - For `peer-chat` only: the [agterm](https://github.com/umputun/agterm) terminal 0.24 or newer with
   `agtermctl`, and `peer-chat.py` on `PATH`.
+- For `agdoc`: `jq`, and agterm with `agtermctl` to show the page in an overlay. Outside agterm it opens
+  the page in the browser.
 
 `install` does not check these. `scripts/ai-config doctor` reports a program that a manifest entry
 requires and that is missing from `PATH`.

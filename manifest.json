@@ -117,6 +117,19 @@
       "targets": [
         "~/.codex/AGENTS.md"
       ]
+    },
+    {
+      "id": "skill/agdoc",
+      "method": "symlink",
+      "source": "claude/skills/agdoc",
+      "targets": [
+        "~/.claude/skills/agdoc"
+      ],
+      "requires": {
+        "commands": [
+          "jq"
+        ]
+      }
     }
   ]
 }

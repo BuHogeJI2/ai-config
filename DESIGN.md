@@ -431,6 +431,8 @@ Skill migration finished on 2026-09-28 with these results:
 - `styles-handling` was obsolete and was deleted, not migrated.
 - `~/.claude/skills/synced/` is cloud-synchronized and never managed.
 
+`agdoc` was adopted on 2026-10-01 as a Claude skill, because it relies on `AskUserQuestion` and `${CLAUDE_SKILL_DIR}`. Inside agterm its `show.sh` needs `agtermctl` and `jq`; outside agterm it opens the page in the browser. Its entry requires only `jq`, because the skill still works without agterm.
+
 Instructions are migrated next, and these cases remain:
 
 - `~/.codex/AGENTS.md` and `~/.claude/CLAUDE.md` state the same policies in different words. Migration chooses one wording for `shared/instructions.md`.
