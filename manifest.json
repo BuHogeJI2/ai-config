@@ -89,6 +89,15 @@
       ]
     },
     {
+      "id": "skill/jira-ticket",
+      "method": "symlink",
+      "source": "shared/skills/jira-ticket",
+      "targets": [
+        "~/.agents/skills/jira-ticket",
+        "~/.claude/skills/jira-ticket"
+      ]
+    },
+    {
       "id": "skill/peer-chat",
       "method": "symlink",
       "source": "claude/skills/peer-chat",

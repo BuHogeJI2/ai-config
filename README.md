@@ -41,6 +41,7 @@ repository and make it yours:
 | `backlog` | both | Files out-of-scope findings into a repo-local backlog and checks them later. |
 | `autopilot` | both | Finishes a task without check-ins: decides open questions, commits verified steps, reports at the end. |
 | `ru` | both | Explains the current topic in Russian, once or for the rest of the session (`--full`, `--off`). |
+| `jira-ticket` | both | Drafts Jira ticket text for managers: scoped title, description, acceptance criteria. |
 | `peer-chat` | Claude, Codex | Lets Claude and Codex talk to each other in an agterm split. |
 | `agdoc` | Claude | Builds an HTML page about the current issue, PR, plan or topic and shows it in agterm. |
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Jira ticket"
+  short_description: "Draft Jira ticket titles, descriptions and acceptance criteria"
+  default_prompt: "Use $jira-ticket to draft a Jira ticket for the current task."

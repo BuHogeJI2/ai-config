@@ -437,6 +437,8 @@ Skill migration finished on 2026-09-28 with these results:
 
 `ru` was added on 2026-10-21 as one shared skill, designed with Codex. Its flags are text the skill reads, not a parser, and Russian mode is conversation state, not a setting. Implicit invocation stays enabled for both agents: Claude has no switch for it that a shared skill may use, and turning it off only for Codex would make the plain phrase behave differently in the two agents.
 
+`jira-ticket` was added on 2026-10-21 as one shared skill, designed with Codex. It only drafts text; it has no Jira connection. The output avoids Markdown and wiki markup by default (plain section lines, `- ` bullets, no bold), because Jira Cloud accepts pasted Markdown while Server and Data Center fields use wiki markup or plain text, and the same text should paste cleanly into either.
+
 Instructions are migrated next, and these cases remain:
 
 - `~/.codex/AGENTS.md` and `~/.claude/CLAUDE.md` state the same policies in different words. Migration chooses one wording for `shared/instructions.md`.
