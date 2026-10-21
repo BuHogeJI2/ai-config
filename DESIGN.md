@@ -433,6 +433,8 @@ Skill migration finished on 2026-09-28 with these results:
 
 `agdoc` was adopted on 2026-10-01 as a Claude skill, because it relies on `AskUserQuestion` and `${CLAUDE_SKILL_DIR}`. Inside agterm its `show.sh` needs `agtermctl` and `jq`; outside agterm it opens the page in the browser. Its entry requires only `jq`, because the skill still works without agterm.
 
+`autopilot` was added on 2026-10-21 as one shared skill, designed with Codex: the workflow needs nothing agent-specific. It is instructions for the running session, not a background runner. What an autopilot request authorizes (no wait for `go`, commits of the run's verified work with or without a plan) is stated in `shared/instructions.md`; `commit-me` points there and to the skill, which settles the questions `commit-me` would otherwise ask.
+
 Instructions are migrated next, and these cases remain:
 
 - `~/.codex/AGENTS.md` and `~/.claude/CLAUDE.md` state the same policies in different words. Migration chooses one wording for `shared/instructions.md`.

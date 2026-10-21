@@ -1,0 +1,4 @@
+interface:
+  display_name: "Autopilot"
+  short_description: "Finish a task without check-ins and report the decisions"
+  default_prompt: "Use $autopilot to finish this task without asking me, and report what you decided."

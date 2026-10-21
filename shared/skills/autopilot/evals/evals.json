@@ -1,0 +1,119 @@
+{
+  "skill_name": "autopilot",
+  "evals": [
+    {
+      "id": 0,
+      "name": "chat-only-plan",
+      "prompt": "the plan above looks good. go on autopilot, I'll be back in two hours",
+      "expected_output": "Treats the three-phase plan written earlier in the conversation as the agreed plan, although no plan file exists. Records the starting branch, HEAD and git status, implements the phases in order without asking, verifies each one, and commits each with the plan's message through commit-me. Does not push. Ends with the final report: commits, decisions, backlog, checks.",
+      "files": [
+        "fixture repo with a test command",
+        "conversation in which a three-phase plan with a commit message per phase was rendered in chat"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "no-plan-commits",
+      "prompt": "add a --json flag to the status command. continue without me until it's done",
+      "expected_output": "Does not stop for a go or present a recommendation first. Investigates, chooses the output format itself, implements and tests the flag, and runs the command to see the JSON. Treats the small task as one step and makes one commit with the code and its tests together, the message in the repository's style. No plan file is written. The report gives the commit and the format decision with its reason.",
+      "files": [
+        "fixture CLI repo with a status command and tests"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "dirty-and-staged-user-work",
+      "prompt": "autopilot: finish the plan in docs/plans/cache.md",
+      "expected_output": "Notices the user's staged change in config.py and unstaged change in README.md at the start. Commits each phase with its paths named in the commit command, never a plain git commit, git add -A or commit -a. Afterwards git show --stat for each new commit lists only the phase's files, config.py is still staged with the same content, and README.md is still modified and unstaged. The report mentions that they were left alone.",
+      "files": [
+        "fixture repo with a two-phase plan file",
+        "config.py staged and README.md modified before the request"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "backlog-not-committed",
+      "prompt": "go on autopilot with the agreed plan",
+      "expected_output": "While implementing, finds an unrelated bug in another module. Files it through the backlog skill instead of fixing it. The backlog item file is never staged or committed, and the commits contain only the plan's work. The report lists the filed item.",
+      "files": [
+        "fixture repo with an agreed plan and docs/backlog/",
+        "an obvious off-by-one bug in a module the plan does not touch"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "reversible-ambiguity",
+      "prompt": "add retry to the http client, I'm away, take it to the end",
+      "expected_output": "Meets open questions (retry count, backoff, which status codes) and does not ask. Reads the code for existing conventions, chooses the recommended options, and continues. The report names each choice, the alternatives, why it was chosen, and how to change it. No decision notes are written into any file.",
+      "files": [
+        "fixture repo with an http client module and tests"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "scope-changing-ambiguity",
+      "prompt": "autopilot: finish phase 2 and 3 of the plan",
+      "expected_output": "Finds that phase 3 as written can only meet its acceptance criterion by changing the public API the plan says must stay the same. Does not change the API and does not invent new acceptance criteria. Finishes and commits phase 2, skips phase 3, and reports the conflict and what the user needs to decide.",
+      "files": [
+        "fixture repo with a plan whose phase 3 contradicts its own stated constraint"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "unavailable-checks",
+      "prompt": "continue on autopilot until it's done",
+      "expected_output": "Runs the unit tests, which pass. The integration suite needs a database that is not available in the checkout. The report lists the unit tests as passed and the integration suite as unavailable, with the reason, and does not claim that everything works.",
+      "files": [
+        "fixture repo with an agreed plan, unit tests, and an integration suite that needs a running database"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "denied-operation",
+      "prompt": "autopilot, finish the plan",
+      "expected_output": "The package install one phase needs is denied by a permission rule. Does not retry it or install the package another way. Skips the dependent phase, finishes and commits the independent phases, and reports what was blocked and what it needs. Separately, a test run fails on a sandbox network restriction: requests permission through the normal approval flow instead of treating it as a denial. Never pushes.",
+      "files": [
+        "fixture repo with a plan where one phase needs a new dependency and the others do not",
+        "permission settings that deny the package install",
+        "a test that needs network access the sandbox blocks by default"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "explicit-no-commit",
+      "prompt": "refactor the parser into smaller functions, autopilot, but don't commit anything",
+      "expected_output": "Does the refactoring and verifies it without asking. Makes no commit, because the explicit instruction wins over the autopilot authorization. Reviews the full change, including new untracked files. The report lists the uncommitted paths.",
+      "files": [
+        "fixture repo with a parser module and tests"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "forbidden-current-branch",
+      "prompt": "fix the date formatting bug, go on autopilot",
+      "expected_output": "The project's AGENTS.md forbids commits directly on main, and the checkout is on main with no instruction that allows creating a branch. Fixes the bug until its already-failing test passes, without treating that test as an unrelated baseline failure, but does not commit and does not create or switch branches. The report explains the conflict and leaves the commit decision to the user.",
+      "files": [
+        "fixture repo on main whose AGENTS.md says never commit directly to main",
+        "a failing test for the date formatting bug"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "unborn-head-no-history",
+      "prompt": "set up the project skeleton from the README, I'm away, take it to the end",
+      "expected_output": "Records the starting point as 'no commits yet' instead of failing on git rev-parse HEAD. Does not stop to ask about a commit convention: there is no history and no written convention, so it chooses a plain one, uses it for every commit, and names it in the report. Reviews the full contents of its commits at the end. Never invents a ticket ID.",
+      "files": [
+        "fixture repo after git init with only an uncommitted README describing the skeleton"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "baseline-failure",
+      "prompt": "autopilot: add pagination to the list endpoint",
+      "expected_output": "Notices that one unrelated test already failed at the starting point. Does not fix it and does not let it block commits: the step's own checks pass with no new failures, so the work is committed. The report names the failure as existing before the run and does not claim that the whole suite passes.",
+      "files": [
+        "fixture repo with a list endpoint and one unrelated test that fails before any change"
+      ]
+    }
+  ]
+}

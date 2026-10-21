@@ -14,6 +14,8 @@ Finishing a task is not a request to commit. Neither is a green test run, a comp
 
 **Counts as asking:** "commit", "commit this", "fix X and commit it". An explicit instruction to commit, in some form.
 
+**Autopilot:** what an explicit autopilot request authorizes is set by the user's instructions, and the `autopilot` skill says how to settle the questions below without asking. Otherwise, build the message as described here.
+
 **"Push it" and "land it" are not a request to commit.** They cover commits that already exist. If there are uncommitted changes, ask whether to commit them first; do not create a commit on your own to have something to push.
 
 **Does not count:** "fix the bug", "make the tests pass", "clean this up", "that looks good", "go with phase 3". These are requests to change code. The change is the deliverable; the commit is a separate decision that stays with the user.

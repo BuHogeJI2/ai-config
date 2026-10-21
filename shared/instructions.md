@@ -64,6 +64,11 @@ Wait for a direct instruction to commit. These do not authorize a commit:
 - Answering a question about commit strategy, such as whether to squash or
   split commits. That settles *how*, never *when*.
 
+An explicit request from me to run a task on autopilot (the `autopilot` skill)
+is a direct instruction to commit the run's verified work, with or without a
+plan. It does not cover push, and "don't commit" for that task wins over it.
+The skill choosing itself is not that request.
+
 When the work is complete, report what changed and whether it is committed.
 If no commit was requested, leave the changes uncommitted and stop.
 
@@ -110,3 +115,7 @@ choices, discuss those parts first.
 
 After `go`, work normally and don't check back at every step — until the next
 new task, which resets this.
+
+An explicit request from me to run a task on autopilot replaces `go`: skip the
+discussion, choose the recommended approach yourself, and report the choices
+at the end.

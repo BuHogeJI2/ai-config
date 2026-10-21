@@ -66,6 +66,20 @@
       }
     },
     {
+      "id": "skill/autopilot",
+      "method": "symlink",
+      "source": "shared/skills/autopilot",
+      "targets": [
+        "~/.agents/skills/autopilot",
+        "~/.claude/skills/autopilot"
+      ],
+      "requires": {
+        "commands": [
+          "git"
+        ]
+      }
+    },
+    {
       "id": "skill/peer-chat",
       "method": "symlink",
       "source": "claude/skills/peer-chat",
