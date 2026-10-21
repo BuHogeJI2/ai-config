@@ -435,6 +435,8 @@ Skill migration finished on 2026-09-28 with these results:
 
 `autopilot` was added on 2026-10-21 as one shared skill, designed with Codex: the workflow needs nothing agent-specific. It is instructions for the running session, not a background runner. What an autopilot request authorizes (no wait for `go`, commits of the run's verified work with or without a plan) is stated in `shared/instructions.md`; `commit-me` points there and to the skill, which settles the questions `commit-me` would otherwise ask.
 
+`ru` was added on 2026-10-21 as one shared skill, designed with Codex. Its flags are text the skill reads, not a parser, and Russian mode is conversation state, not a setting. Implicit invocation stays enabled for both agents: Claude has no switch for it that a shared skill may use, and turning it off only for Codex would make the plain phrase behave differently in the two agents.
+
 Instructions are migrated next, and these cases remain:
 
 - `~/.codex/AGENTS.md` and `~/.claude/CLAUDE.md` state the same policies in different words. Migration chooses one wording for `shared/instructions.md`.

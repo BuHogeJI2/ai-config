@@ -40,6 +40,7 @@ repository and make it yours:
 | `claude-review` | Codex | Runs Claude in the background for an independent review, then checks each finding. |
 | `backlog` | both | Files out-of-scope findings into a repo-local backlog and checks them later. |
 | `autopilot` | both | Finishes a task without check-ins: decides open questions, commits verified steps, reports at the end. |
+| `ru` | both | Explains the current topic in Russian, once or for the rest of the session (`--full`, `--off`). |
 | `peer-chat` | Claude, Codex | Lets Claude and Codex talk to each other in an agterm split. |
 | `agdoc` | Claude | Builds an HTML page about the current issue, PR, plan or topic and shows it in agterm. |
 

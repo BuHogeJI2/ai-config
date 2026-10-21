@@ -1,0 +1,4 @@
+interface:
+  display_name: "Explain in Russian"
+  short_description: "Explain the current topic in Russian, once or for the session"
+  default_prompt: "Use $ru to explain the current topic in Russian."

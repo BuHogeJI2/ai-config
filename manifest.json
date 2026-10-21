@@ -80,6 +80,15 @@
       }
     },
     {
+      "id": "skill/ru",
+      "method": "symlink",
+      "source": "shared/skills/ru",
+      "targets": [
+        "~/.agents/skills/ru",
+        "~/.claude/skills/ru"
+      ]
+    },
+    {
       "id": "skill/peer-chat",
       "method": "symlink",
       "source": "claude/skills/peer-chat",
