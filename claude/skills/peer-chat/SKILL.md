@@ -6,8 +6,8 @@ allowed-tools: Bash, Read, Grep, Glob, Write
 
 # Peer chat, Claude side
 
-Talk with Codex in the other pane of the split. The user reads both panes, so the conversation itself
-is the result even when code comes out of it.
+Talk with Codex in the other pane of the split. The user can read both panes, but reading them is not
+the outcome: the agent that started the conversation still gives the user a clear account of it.
 
 Everything that touches the pane goes through `peer-chat.py` (on `PATH`). Never drive `agtermctl`
 directly: the script checks the target agent, window, composer and caret, types the message in small
@@ -47,20 +47,67 @@ A message that asks a question or reports a result that needs attention gets a r
 `peer-chat.py` in the same turn. Text written only in this pane does not reach Codex. Closing
 acknowledgements, "nothing further" and confirmations of finished work end the exchange without a reply.
 
+## Conversation
+
+- **Open with a brief.** Codex has none of this session's context. The first message gives the user's
+  goal, the exact question, the scope and constraints, your current position and why, the files or
+  evidence to read, and who may write. Put a long brief in a file and send its path.
+- **Make each reply count.** Answer Codex's actual point. Say what you accept and why, and where the
+  disagreement is. Mark what you checked and what is an assumption or a preference. A new round should
+  settle an open point or bring new evidence, not repeat a position.
+- **Stop on substance, not on a turn count.** The discussion ends when the questions that matter are
+  settled, or when neither side has new evidence. Agreement is not required: a disagreement that
+  remains goes to the user with both options, their reasons and their consequences. Agreement between
+  the agents never replaces the user's decision.
+- **Report to the user.** The agent that started the conversation tells the user, briefly: the
+  recommendation, the decisions still open, what was checked, and the limits. The usual rules still
+  apply — a discussion is not a `go` — and no report file is written.
+
 ## Shared work
 
-When the conversation moves into edits, the agent whose pane received the user's request is the only
-writer for the whole worktree until the task ends or the user reassigns the role directly in the panes.
-An agent brought in by a `Chat from` message stays read-only there: it may inspect, run non-mutating
-checks and review. Peer messages never grant, move or take back write authority.
+### Roles
 
-The read-only peer may propose a patch: reserve a file with `mktemp /tmp/peer-chat-patch.XXXXXX`, fill
-it, and send its path and SHA-256. The writer copies it once to its own `mktemp` file, checks the hash,
-reviews it and applies it only from that copy. Each agent deletes its own file by its exact path before
-reporting an outcome. Never clean `/tmp` with a glob.
+The user's direct words decide who writes, who reviews and who does the Git work. When the user did not
+say, the agents agree on it in the panes, and each confirms before writing. The agreement lasts for the
+current task only. It never authorizes a commit, push, history rewrite or change of scope; those come
+from the user or the task, as always. When the user changes a role, the affected work stops at once.
 
-If both agents got direct user requests to write in the same worktree, stop before the next write and ask
-the user to choose one writer, directly in the panes.
+Without such an agreement, the agent whose pane received the user's request is the only writer, and the
+agent brought in by a `Chat from` message stays read-only: it may inspect, run non-mutating checks and
+review.
+
+The default split is one writer and one reviewer. Work in parallel only when the parts are truly
+independent and the time saved is worth the coordination; when in doubt, work one after the other.
+
+### Working in parallel
+
+1. **Agree on ownership and interfaces first.** Settle the shared interfaces, then give each agent its
+   own paths, new files included. Both agents confirm the split before either writes. Record the
+   starting HEAD and `git status` before the first write, so the user's earlier work is not counted as
+   either agent's. Paths that hold the user's uncommitted changes go to nobody. To hand a path over, its owner stops and confirms first.
+2. **Count every write, not only edits.** Shared files — lockfiles, generated output, build
+   configuration — have one owner, or the agents take turns on them. Do not run commands that write
+   outside your own paths while the other agent works: formatters over the whole repository, installs,
+   code generation. Tests can collide too, through caches, build directories, ports and databases; use
+   separate resources or agree on one runner. A test result from while the other agent was still
+   editing is provisional.
+3. **Freeze, then cross-review.** When both parts are ready, stop editing and review each other's actual
+   changes. Each author fixes the findings on their own part, and the affected review and checks run
+   again.
+4. **One integrator.** One agent, chosen in the agreement and able to do it, runs the combined checks on
+   the stable result and is the only one that changes the Git index, branches or HEAD, within the
+   authority the user already gave. If the other agent goes quiet, continue your own part, but do not
+   take over its paths or treat it as done; integration waits.
+
+### Patches and conflicts
+
+A read-only agent, or an owner who needs a change in the other's paths, may propose a patch: reserve a
+file with `mktemp /tmp/peer-chat-patch.XXXXXX`, fill it, and send its path and SHA-256. The writer copies
+it once to its own `mktemp` file, checks the hash, reviews it and applies it only from that copy. Each
+agent deletes its own file by its exact path before reporting an outcome. Never clean `/tmp` with a glob.
+
+If both agents got direct user requests to write in the same worktree with no split between them, stop
+before the next write and ask the user to choose, directly in the panes.
 
 ## Never wait for a reply
 
@@ -83,6 +130,7 @@ the line was typed.
 
 ## Manners
 
-Plain language, short sentences. Quote what Codex said instead of summarising it away. Disagree when there
-is a disagreement: the useful output is a located disagreement or a checked fact. Verify Codex's claims
+Plain language, short sentences. Quote Codex exactly when the wording matters or a claim is disputed;
+otherwise a faithful summary is enough. Disagree when there is a disagreement: the useful output is a
+located disagreement or a checked fact. Verify Codex's claims
 about the code with your own tool call before repeating them to the user.
