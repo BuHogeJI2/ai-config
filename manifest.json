@@ -98,6 +98,20 @@
       ]
     },
     {
+      "id": "skill/pr-review",
+      "method": "symlink",
+      "source": "shared/skills/pr-review",
+      "targets": [
+        "~/.agents/skills/pr-review",
+        "~/.claude/skills/pr-review"
+      ],
+      "requires": {
+        "commands": [
+          "git"
+        ]
+      }
+    },
+    {
       "id": "skill/peer-chat",
       "method": "symlink",
       "source": "claude/skills/peer-chat",

@@ -42,6 +42,7 @@ repository and make it yours:
 | `autopilot` | both | Finishes a task without check-ins: decides open questions, commits verified steps, reports at the end. |
 | `ru` | both | Explains the current topic in Russian, once or for the rest of the session (`--full`, `--off`). |
 | `jira-ticket` | both | Drafts Jira ticket text for managers: scoped title, description, acceptance criteria. |
+| `pr-review` | both | Reviews a PR read-only and drafts factual review messages tied to file and line. |
 | `peer-chat` | Claude, Codex | Lets Claude and Codex talk to each other in an agterm split. |
 | `agdoc` | Claude | Builds an HTML page about the current issue, PR, plan or topic and shows it in agterm. |
 
@@ -89,10 +90,14 @@ The tool needs macOS or Linux, Git, and Python 3.9 or newer, and nothing else.
 
 Some skills need more:
 
-- Claude Code and/or Codex, and both for the review and `peer-chat` skills.
+- Claude Code and/or Codex, and both for `codex-review`, `claude-review` and `peer-chat`.
 - Node.js, for the skills with scripts: `backlog`, `codex-review`, `claude-review`.
-- For the review skills: the other agent's CLI on `PATH`, installed and logged in (`codex` for
-  `codex-review`, `claude` for `claude-review`). The reviewer runs headless; no pane or terminal is needed.
+- For `codex-review` and `claude-review`: the other agent's CLI on `PATH`, installed and logged in
+  (`codex` for `codex-review`, `claude` for `claude-review`). The reviewer runs headless; no pane or
+  terminal is needed.
+- For `pr-review`: read access to the PR's host to review a PR by link or number, through its CLI
+  (`gh` for GitHub), API or a connector. Without it, Git gives the code of a branch or commit, but not
+  the PR description or target branch.
 - For `peer-chat` only: the [agterm](https://github.com/umputun/agterm) terminal 0.24 or newer with
   `agtermctl`, and `peer-chat.py` on `PATH`.
 - For `agdoc`: `jq`, and agterm with `agtermctl` to show the page in an overlay. Outside agterm it opens

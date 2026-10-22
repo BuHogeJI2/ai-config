@@ -439,6 +439,8 @@ Skill migration finished on 2026-09-28 with these results:
 
 `jira-ticket` was added on 2026-10-21 as one shared skill, designed with Codex. It only drafts text; it has no Jira connection. The output avoids Markdown and wiki markup by default (plain section lines, `- ` bullets, no bold), because Jira Cloud accepts pasted Markdown while Server and Data Center fields use wiki markup or plain text, and the same text should paste cleanly into either.
 
+`pr-review` was added on 2026-10-22 as one shared skill, designed with Codex. It has no script: the host CLI and `git` are enough, and `gh` is an example, not a requirement. It is read-only toward the PR and the user's checkout, and pins the reviewed SHAs so the line numbers in its messages refer to a known version. It reviews statically by default because running a PR's code is running untrusted code. Priorities stay outside the paste-ready text, and there is no fixed message count, so a serious finding is never cut.
+
 Instructions are migrated next, and these cases remain:
 
 - `~/.codex/AGENTS.md` and `~/.claude/CLAUDE.md` state the same policies in different words. Migration chooses one wording for `shared/instructions.md`.

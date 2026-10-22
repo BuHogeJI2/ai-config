@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR review"
+  short_description: "Review a PR and draft factual review messages for its author"
+  default_prompt: "Use $pr-review to review this pull request and draft messages for its author."
